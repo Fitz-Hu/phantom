@@ -221,6 +221,7 @@ module dim
 #endif
 #else
  logical, parameter :: mhd = .false.
+ integer, parameter :: maxBxyz  = 3
 #endif
  integer, parameter :: maxBevol  = 4  ! size of B-arrays (Bx,By,Bz,psi)
  integer, parameter :: ndivcurlB = 4
