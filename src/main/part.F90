@@ -402,7 +402,7 @@ subroutine allocate_part
  call allocate_array('divcurlB', divcurlB, ndivcurlB, maxp)
  call allocate_array('Bevol', Bevol, maxBevol, maxmhd)
  call allocate_array('Bxyz', Bxyz, maxBxyz, maxmhd)
- if (gr .and. mhd) call allocate_array('bxyz_down', bxyzd, maxBxyz, maxmhd)
+ call allocate_array('bxyz_down', bxyzd, maxBxyz, maxmhd)
  call allocate_array('iorig', iorig, maxp)
  call allocate_array('dustprop', dustprop, 2, maxp_growth)
  call allocate_array('dustgasprop', dustgasprop, 4, maxp_growth)
@@ -482,6 +482,7 @@ subroutine deallocate_part
  if (allocated(divcurlB)) deallocate(divcurlB)
  if (allocated(Bevol))    deallocate(Bevol)
  if (allocated(Bxyz))     deallocate(Bxyz)
+ if (allocated(Bxyzd))    deallocate(Bxyzd)
  if (allocated(iorig))    deallocate(iorig)
  if (allocated(dustprop)) deallocate(dustprop)
  if (allocated(dustgasprop))  deallocate(dustgasprop)
@@ -565,6 +566,7 @@ subroutine init_part
  if (mhd) then
     Bevol = 0.
     Bxyz  = 0.
+    Bxyzd  = 0.
     Bextx = 0.
     Bexty = 0.
     Bextz = 0.
