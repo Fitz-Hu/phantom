@@ -120,6 +120,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  real                             :: delta,gam1,fac,dtg
  real                             :: uuleft,uuright,xbdyleft,xbdyright,dxright
  real                             :: rholeft,rhoright,denscgs,Pcgs,ucgs,temp
+ real                             :: vright(1:3),vleft(1:3),U0right,U0left,Bright(1:3),Bleft(1:3)
  real                             :: cooling_length,cs0
  integer                          :: i,ierr,nbpts,iverbose
  character(len=120)               :: shkfile, filename
@@ -293,7 +294,16 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
        vxyzu(2,i) = rightstate(ivy)
        vxyzu(3,i) = rightstate(ivz)
        if (maxvxyzu >= 4) vxyzu(4,i) = uuright
-       if (mhd) Bxyz(1:3,i) = rightstate(iBx:iBz)
+       if (mhd) then
+          if (gr) then
+             vright = rightstate(ivx:ivz)
+             U0right = 1./sqrt(1.-dot_product(vright,vright))
+             Bright = rightstate(iBx:iBz)
+             Bxyz(2:4,i) = Bright/U0right + U0right*dot_product(vright,Bright)*vright
+          else
+             Bxyz(1:3,i) = rightstate(iBx:iBz)
+          endif
+       endif
        if (do_radiation) rad(iradxi,i) = rightstate(ixi)
     else
        xyzh(4,i)  = hrho(rholeft,massoftype(igas))
@@ -301,7 +311,16 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
        vxyzu(2,i) = leftstate(ivy)
        vxyzu(3,i) = leftstate(ivz)
        if (maxvxyzu >= 4) vxyzu(4,i) = uuleft
-       if (mhd) Bxyz(1:3,i) = leftstate(iBx:iBz)
+       if (mhd) then
+          if (gr) then
+             vleft = leftstate(ivx:ivz)
+             U0left = 1./sqrt(1.-dot_product(vleft,vleft))
+             Bleft = leftstate(iBx:iBz)
+             Bxyz(2:4,i) = Bleft/U0left + U0left*dot_product(vleft,Bleft)*vleft
+          else
+             Bxyz(1:3,i) = leftstate(iBx:iBz)
+          endif
+       endif
        if (do_radiation) rad(iradxi,i) = leftstate(ixi)
     endif
     !

@@ -1069,7 +1069,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
  real    :: dlorentzv,lorentzj,lorentzi_star,lorentzj_star,projbigvi,projbigvj
  real    :: bigvj(1:3),velj(3),metricj(0:3,0:3,2),projbigvstari,projbigvstarj
  real    :: radPj,fgravxi,fgravyi,fgravzi
- real    :: b2j,sqrtgj,u0j,sqrtgi,u0i,dsqrtg_u0j
+ real    :: b2i,b2j,sqrtgj,u0j,sqrtgi,u0i,dsqrtg_u0j,projui,projuj,enthtoti,enthtotj
  real    :: gradpx,gradpy,gradpz,gradP_cooli,gradP_coolj
 
  ! unpack
@@ -1180,6 +1180,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
     Byi  = xpartveci(iBevolyi)*rhoi
     Bzi  = xpartveci(iBevolzi)*rhoi
     psii = xpartveci(ipsi)
+    b2i = dot_product(bxyz(:,i),bxyzd(:,i))
  else
     Bxi  = 0.0
     Byi  = 0.0
@@ -1209,6 +1210,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
  !avterm  = mrhoi5*alphai       !  artificial viscosity parameter
  auterm  = mrhoi5*alphau       !  artificial thermal conductivity parameter
  avBterm = mrhoi5*alphaB*rho1i
+ if (gr) avBterm = avBterm/U0i
 !
 !--initialise the following to zero for the case
 !
@@ -1464,6 +1466,13 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
           ! Reduce problem to 1D along the line of sight
           projbigvi = bigvi(1)*runix + bigvi(2)*runiy + bigvi(3)*runiz !dot_product(bigvi,rij)
           projbigvj = bigvj(1)*runix + bigvj(2)*runiy + bigvj(3)*runiz
+          !projui = u0i*(vxi*runix + vyi*runiy + vzi*runiz)
+          !projuj = u0j*(vxj*runix + vyj*runiy + vzj*runiz)
+          projui = vxi*runix + vyi*runiy + vzi*runiz ! projvi
+          projuj = vxj*runix + vyj*runiy + vzj*runiz ! projvj
+          
+          projui = projui/sqrt(1.-projui**2)
+          projuj = projuj/sqrt(1.-projuj**2)
 
           ! Reconstruction of velocity
           if (maxdvdx==maxp) dvdxj(:) = dvdx(:,j)
@@ -1503,14 +1512,30 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
                 b2j = Bxj*Bxj + Byj*Byj + Bzj*Bzj
              endif
 
-             dBx = Bxi - Bxj
-             dBy = Byi - Byj
-             dBz = Bzi - Bzj
+             if (gr) then
+                dBx = bxyz(2,i) - bxyz(2,j)
+                dBy = bxyz(3,i) - bxyz(3,j)
+                dBz = bxyz(4,i) - bxyz(4,j)
+             else
+                dBx = Bxi - Bxj
+                dBy = Byi - Byj
+                dBz = Bzi - Bzj
+             endif
              projBi = Bxi*runix + Byi*runiy + Bzi*runiz
              if (usej) projBj = Bxj*runix + Byj*runiy + Bzj*runiz
              projdB = dBx*runix + dBy*runiy + dBz*runiz
-             dB2 = dBx*dBx + dBy*dBy + dBz*dBz
-             divBdiffterm = -pmassj*projdB*grkerni
+             if (gr) then
+                !dBi = Bxi*dBx + Byi*dBy + Bzi*dBz
+                dB2 = b2i - b2j
+                !if (db2 > 1.e-10) print*, b2i, b2j, db2
+             else
+                dB2 = dBx*dBx + dBy*dBy + dBz*dBz
+             endif
+             if (.not. gr) then
+                divBdiffterm = -pmassj*projdB*grkerni
+             else
+                divBdiffterm = 0.
+             endif
           endif
        else
           !-- v_sig for pairs of particles that are not gas-gas
@@ -1555,6 +1580,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
                 densj = rhoj
              endif
              enthj  = 1.+enj+prj/densj
+             if (gr .and. mhd) enthj = enthj + b2j/densj
              radPj = 0.
              if (do_radiation) radPj = radprop(iradP,j)
              !
@@ -1575,6 +1601,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
              mrhoj5   = 0.5*pmassj*rho1j
              autermj  = mrhoj5*alphau
              avBtermj = mrhoj5*alphaB*rho1j
+             if (gr) avBtermj = avBtermj/u0j
 
              if (gr) then
                 ! Relativistic version vij + csi
@@ -1631,7 +1658,11 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
           !
           qrho2i = 0.
           qrho2j = 0.
-          if (gr) enthi  = 1.+eni+pri/densi
+          if (gr) then
+             enthi  = 1.+eni+pri/densi
+             if (mhd) enthi = enthi + b2i/densi
+          endif
+
 
 !------------------
 #ifdef DISC_VISCOSITY
@@ -1674,9 +1705,10 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
 !------------------
           if (projv < 0.) then
              if (gr) then
-                lorentzi_star = 1./sqrt(1.-projbigvstari**2)
-                lorentzj_star = 1./sqrt(1.-projbigvstarj**2)
-                dlorentzv = lorentzi_star*projbigvstari - lorentzj_star*projbigvstarj
+                !lorentzi_star = 1./sqrt(1.-projbigvstari**2)
+                !lorentzj_star = 1./sqrt(1.-projbigvstarj**2)
+                !dlorentzv = lorentzi_star*projbigvstari - lorentzj_star*projbigvstarj
+                dlorentzv = projui - projuj
                 qrho2i = -0.5*rho1i*vsigavi*enthi*dlorentzv
                 if (usej) qrho2j = -0.5*rho1j*vsigavj*enthj*dlorentzv
              else
@@ -1732,10 +1764,15 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
              ! artificial resistivity
              !
              vsigB = sqrt((dvx - projv*runix)**2 + (dvy - projv*runiy)**2 + (dvz - projv*runiz)**2)
+             !print*, dvx, dvy, dvz, projv, runix, runiy, runiz
              dBdissterm = (avBterm*grkerni + avBtermj*grkernj)*vsigB
 
              !--energy dissipation due to artificial resistivity
              if (useresistiveheat) dudtresist = -0.5*dB2*dBdissterm
+
+             !print*, avBterm, grkerni, avBtermj, grkernj, vsigB
+             !print*, dBdissterm, dudtresist
+             !print*
 
              pmjrho21grkerni = pmassj*rho21i*grkerni
              pmjrho21grkernj = pmassj*rho21j*grkernj
@@ -2222,7 +2259,7 @@ subroutine get_stress(pri,spsoundi,rhoi,densi,rho1i,enthi,xi,yi,zi, &
        bdxi = b4di(1)*dsqrtg_u0
        bdyi = b4di(2)*dsqrtg_u0
        bdzi = b4di(3)*dsqrtg_u0
-       valfven2i = B2i/(b2i+densi*enthi)
+       valfven2i = B2i/(densi*enthi)
        vwavei    = sqrt(valfven2i+spsoundi*spsoundi*(1.- valfven2i))
     else
        bdxi = Bxi
@@ -2438,6 +2475,7 @@ subroutine start_cell(cell,iphase,xyzh,vxyzu,gradh,divcurlv,divcurlB,dvdx,Bevol,
        spsoundi = eos_vars(ics,i)
        tempi = eos_vars(itemp,i)
        enthi = 1. + eni + pri/densi
+       if (gr .and. mhd) enthi = enthi + b2i/densi
        radPi = 0.
        if (do_radiation) radPi = radprop(iradP,i)
        !

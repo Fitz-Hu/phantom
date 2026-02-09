@@ -145,9 +145,9 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
  real               :: pxi,pyi,pzi,p2i,p2mean
  real               :: dtsph_next,dti,time_now
  logical, parameter :: allow_waking = .true.
- integer, parameter :: maxits = 30
+ integer, parameter :: maxits = 3
  logical            :: converged,store_itype
-
+ real               :: bevolxi,bevolyi,bevolzi,errbi
 !
 ! set initial quantities
 !
@@ -471,7 +471,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
 !$omp parallel default(none) &
 !$omp shared(xyzh,vxyzu,vpred,fxyzu,npart,hdtsph,store_itype) &
 !$omp shared(pxyzu,ppred) &
-!$omp shared(Bevol,dBevol,iphase,its) &
+!$omp shared(Bevol,dBevol,bpred,iphase,its) &
 !$omp shared(dustevol,ddustevol,use_dustfrac) &
 !$omp shared(dustprop,ddustprop,dustproppred) &
 !$omp shared(xyzmh_ptmass,vxyz_ptmass,fxyz_ptmass,nptmass,massoftype) &
@@ -481,7 +481,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
 !$omp private(dti,hdti) &
 !$omp shared(rad,radpred,drad)&
 !$omp private(i,vxi,vyi,vzi) &
-!$omp private(pxi,pyi,pzi,p2i) &
+!$omp private(pxi,pyi,pzi,p2i,bevolxi,bevolyi,bevolzi,errbi) &
 !$omp private(erri,v2i,eni) &
 !$omp reduction(max:errmax) &
 !$omp reduction(+:np,v2mean,p2mean,nwake,nvfloorc) &
@@ -590,6 +590,17 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
                 erri = (pxi - ppred(1,i))**2 + (pyi - ppred(2,i))**2 + (pzi - ppred(3,i))**2
                 errmax = max(errmax,erri)
 
+                if (mhd) then
+                   Bevolxi = Bevol(1,i)  + hdtsph*dBevol(1,i)
+                   Bevolyi = Bevol(2,i)  + hdtsph*dBevol(2,i)
+                   Bevolzi = Bevol(3,i)  + hdtsph*dBevol(3,i)
+                   errbi = (bevolxi - bpred(1,i))**2 + (bevolyi - bpred(2,i))**2 + (bevolzi - bpred(3,i))**2
+                   errmax = max(errmax,errbi)
+                   Bevol(1,i) = Bevolxi
+                   Bevol(2,i) = Bevolyi
+                   Bevol(3,i) = Bevolzi
+                endif
+
                 p2i = pxi*pxi + pyi*pyi + pzi*pzi
                 p2mean = p2mean + p2i
                 np = np + 1
@@ -628,7 +639,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
                 !
                 ! corrector step for magnetic field and dust
                 !
-                if (mhd)          Bevol(:,i) = Bevol(:,i)  + hdtsph*dBevol(:,i)
+                if (mhd .and. .not. gr) Bevol(:,i) = Bevol(:,i)  + hdtsph*dBevol(:,i)
                 if (do_radiation) rad(:,i)   = rad(:,i) + hdtsph*drad(:,i)
                 if (use_dustfrac) then
                    dustevol(:,i) = dustevol(:,i) + hdtsph*ddustevol(:,i)

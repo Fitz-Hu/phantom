@@ -477,15 +477,22 @@ subroutine compute_energies(t)
 
           ! mhd parameters
           if (mhd) then
-             Bxi       = Bevol(1,i)*rhoi
-             Byi       = Bevol(2,i)*rhoi
-             Bzi       = Bevol(3,i)*rhoi
-             B2i       = Bxi*Bxi + Byi*Byi + Bzi*Bzi
-             Bi        = sqrt(B2i)
-             rho1i     = 1./rhoi
-             valfven2i = B2i*rho1i
-             vsigi     = sqrt(valfven2i + spsoundi*spsoundi)
-             emagi     = pmassi*B2i*rho1i
+             !if (gr) then
+             !   b2i = dot_product(bxyz(:,i),bxyz_down(:,i))
+             !   call unpack_metric(metrici,sqrtg=sqrtg,gcov=gcov)
+             !   call get_u0(gcov,v,U0,ierror)
+             !   emag = emag + b2i/rhoi
+             !else
+                Bxi       = Bevol(1,i)*rhoi
+                Byi       = Bevol(2,i)*rhoi
+                Bzi       = Bevol(3,i)*rhoi
+                B2i       = Bxi*Bxi + Byi*Byi + Bzi*Bzi
+                Bi        = sqrt(B2i)
+                rho1i     = 1./rhoi
+                valfven2i = B2i*rho1i
+                vsigi     = sqrt(valfven2i + spsoundi*spsoundi)
+                emagi     = pmassi*B2i*rho1i
+             !endif
 
              if (was_not_accreted) then
                 emag      = emag + emagi
@@ -663,8 +670,10 @@ subroutine compute_energies(t)
  !
  call finalise_ev_data(ev_data,dnpgas)
 
- if (.not.gr) ekin = 0.5*ekin
- emag = 0.5*emag
+ if (.not.gr) then
+    ekin = 0.5*ekin
+    emag = 0.5*emag
+ endif
  ekin = reduceall_mpi('+',ekin)
  !LS I don't know what to do here ? gamma should be replaced by gammai ?
  if (maxvxyzu >= 4 .or. gamma >= 1.0001) etherm = reduceall_mpi('+',etherm)
