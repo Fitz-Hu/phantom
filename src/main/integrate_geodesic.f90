@@ -63,7 +63,7 @@ subroutine integrate_geodesic(pmass,xyzh,vxyzu,dens,pr,gamma,temp,pxyzu,dist,tim
 
  call pack_metric(xyz,metrics(:,:,:))
  call pack_metricderivs(xyz,metricderivs(:,:,:))
- call get_grforce(xyzh(:),metrics(:,:,:),metricderivs(:,:,:),vxyz,dens,uui,pr,fext(1:3),dt)
+ call get_grforce(1,xyzh(:),metrics(:,:,:),metricderivs(:,:,:),vxyz,dens,uui,pr,fext(1:3),dt)
 
  t = 0.
  dt = min(0.1,tend*0.1,dt)
@@ -82,10 +82,10 @@ subroutine integrate_geodesic(pmass,xyzh,vxyzu,dens,pr,gamma,temp,pxyzu,dist,tim
        its   = its + 1
 
        pprev = pxyz
-       call conservative2primitive(xyz,metrics(:,:,:),vxyz,dens,uui,pr,&
+       call conservative2primitive(1,xyz,metrics(:,:,:),vxyz,dens,uui,pr,&
                                        temp,gamma,rho,pxyz,eni,ierr,ien_type)
        if (ierr > 0) call warning('cons2primsolver [in integrate_geodesic (a)]','did not converge')
-       call get_grforce(xyzh(:),metrics(:,:,:),metricderivs(:,:,:),vxyz,dens,uui,pr,fstar)
+       call get_grforce(1,xyzh(:),metrics(:,:,:),metricderivs(:,:,:),vxyz,dens,uui,pr,fstar)
 
        pxyz = pprev + hdt*(fstar - fext)
        pmom_err = maxval(abs(pxyz - pprev))
@@ -95,7 +95,7 @@ subroutine integrate_geodesic(pmass,xyzh,vxyzu,dens,pr,gamma,temp,pxyzu,dist,tim
     if (its > itsmax ) call warning('integrate_geodesic',&
                               'max # of pmom iterations',var='pmom_err',val=pmom_err)
 
-    call conservative2primitive(xyz,metrics(:,:,:),vxyz,dens,uui,pr,temp,&
+    call conservative2primitive(1,xyz,metrics(:,:,:),vxyz,dens,uui,pr,temp,&
                                     gamma,rho,pxyz,eni,ierr,ien_type)
     if (ierr > 0) call warning('cons2primsolver [in integrate_geodesic (b)]','did not converge')
     xyz = xyz + dt*vxyz
@@ -109,7 +109,7 @@ subroutine integrate_geodesic(pmass,xyzh,vxyzu,dens,pr,gamma,temp,pxyzu,dist,tim
        its         = its+1
        xyz_prev    = xyz
 
-       call conservative2primitive(xyz,metrics(:,:,:),vxyz_star,dens,uui,&
+       call conservative2primitive(1,xyz,metrics(:,:,:),vxyz_star,dens,uui,&
                                        pr,temp,gamma,rho,pxyz,eni,ierr,ien_type)
        if (ierr > 0) call warning('cons2primsolver [in integrate_geodesic (c)]','did not converge')
        xyz  = xyz_prev + hdt*(vxyz_star - vxyz)
@@ -125,9 +125,9 @@ subroutine integrate_geodesic(pmass,xyzh,vxyzu,dens,pr,gamma,temp,pxyzu,dist,tim
     call equationofstate(ieos,pondensi,spsoundi,dens,xyzh(1),xyzh(2),xyzh(3),temp,uui)
     pr = pondensi*dens
 
-    call get_grforce(xyzh(:),metrics(:,:,:),metricderivs(:,:,:),vxyzu(1:3),dens,vxyzu(4),pr,fext(1:3),dt)
+    call get_grforce(1,xyzh(:),metrics(:,:,:),metricderivs(:,:,:),vxyzu(1:3),dens,vxyzu(4),pr,fext(1:3),dt)
     pxyzu(1:3) = pxyzu(1:3) + hdt*fext(1:3)
-    call conservative2primitive(xyz,metrics(:,:,:),vxyz,dens,uui,&
+    call conservative2primitive(1,xyz,metrics(:,:,:),vxyz,dens,uui,&
                                     pr,temp,gamma,rho,pxyz,eni,ierr,ien_type)
     xyzh(1:3) = xyz(1:3)
     pxyzu(1:3) = pxyz(1:3)

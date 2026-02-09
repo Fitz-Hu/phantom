@@ -108,7 +108,7 @@ module forces
        icurlBxi        = 45, &
        icurlByi        = 46, &
        icurlBzi        = 47, &
-       igrainsizei     = 48, &
+       igrainmassi     = 48, &
        igraindensi     = 49, &
        ifilfaci        = 50, &
        ifxi_drag       = 51, &
@@ -117,15 +117,15 @@ module forces
        idti            = 54, &
        imsinki         = 55, &
        idvxdxi         = 56, &
-       idvzdzi         = 62, &
+       idvzdzi         = 64, &
  !--dust arrays initial index
-       idustfraci      = 63, &
+       idustfraci      = 65, &
  !--dust arrays final index
-       idustfraciend   = 63 + (maxdusttypes - 1), &
-       itstop          = 64 + (maxdusttypes - 1), &
-       itstopend       = 64 + 2*(maxdusttypes - 1), &
+       idustfraciend   = 65 + (maxdusttypes - 1), &
+       itstop          = 66 + (maxdusttypes - 1), &
+       itstopend       = 66 + 2*(maxdusttypes - 1), &
  !--final dust index
-       lastxpvdust     = 64 + 2*(maxdusttypes - 1), &
+       lastxpvdust     = 66 + 2*(maxdusttypes - 1), &
        iradxii         = lastxpvdust + 1, &
        iradfxi         = lastxpvdust + 2, &
        iradfyi         = lastxpvdust + 3, &
@@ -958,7 +958,6 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
                        graindens,filfac
  use options,     only:use_porosity,icooling
  use growth,      only:get_size
->>>>>>> master
  use kernel,      only:wkern,cnormk
 #ifdef IND_TIMESTEPS
  use part,        only:ibin_old,iamboundary
@@ -1764,15 +1763,10 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
              ! artificial resistivity
              !
              vsigB = sqrt((dvx - projv*runix)**2 + (dvy - projv*runiy)**2 + (dvz - projv*runiz)**2)
-             !print*, dvx, dvy, dvz, projv, runix, runiy, runiz
              dBdissterm = (avBterm*grkerni + avBtermj*grkernj)*vsigB
 
              !--energy dissipation due to artificial resistivity
              if (useresistiveheat) dudtresist = -0.5*dB2*dBdissterm
-
-             !print*, avBterm, grkerni, avBtermj, grkernj, vsigB
-             !print*, dBdissterm, dudtresist
-             !print*
 
              pmjrho21grkerni = pmassj*rho21i*grkerni
              pmjrho21grkernj = pmassj*rho21j*grkernj
@@ -2319,7 +2313,7 @@ subroutine start_cell(cell,iphase,xyzh,vxyzu,gradh,divcurlv,divcurlB,dvdx,Bevol,
  use growth,    only:get_size
  use part,        only:ibin_old
  use metric_tools, only:unpack_metric
- use utils_gr,     only:get_u0
+ use utils_gr,     only:get_u0,get_sqrtg
  use timestep_ind,    only:get_dt
  use nicil,           only:nimhd_get_jcbcb
  use radiation_utils, only:get_rad_R
@@ -2448,7 +2442,8 @@ subroutine start_cell(cell,iphase,xyzh,vxyzu,gradh,divcurlv,divcurlB,dvdx,Bevol,
           Bzi = Bevol(3,i) * rhoi
           ! for not gr and non_ideal would not work together
           if (gr) then
-             call unpack_metric(metrics(:,:,:,i),sqrtg=sqrtgi,gcov=gcov)
+             call unpack_metric(metrics(:,:,:,i),gcov=gcov)
+             call get_sqrtg(gcov,sqrtgi)
              b2i = dot_product(bxyz(:,i),bxyzd(:,i))
              call get_u0(gcov,vxyzu(1:3,i),u0i,ierror)
              if (ierror > 0) call error('get_u0 in start_cell','1/sqrt(-v_mu v^mu) ---> non-negative: v_mu v^mu')
@@ -2854,7 +2849,7 @@ subroutine finish_cell_and_store_results(icall,cell,fxyzu,xyzh,vxyzu,poten,dt,dv
  use units,          only:unit_ergg,unit_density,get_c_code
  use eos_shen,       only:eos_shen_get_dTdu
  use metric_tools,   only:unpack_metric
- use utils_gr,       only:get_u0,get_sqrtg
+ use utils_gr,       only:get_u0
  use io,             only:error
  use growth,         only:get_size
  use dust,           only:idrag,get_ts

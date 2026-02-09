@@ -380,7 +380,7 @@ subroutine splitpart(i,npartnew)
     vxyzu(4,npartnew) = uold ! reset u
     call pack_metric(xyzh(1:3,npartnew),metrics(:,:,:,npartnew))
     call pack_metricderivs(xyzh(1:3,npartnew),metricderivs(:,:,:,npartnew))
-    call get_grforce(xyzh(:,npartnew),metrics(:,:,:,npartnew),metricderivs(:,:,:,npartnew), &
+    call get_grforce(npartnew,xyzh(:,npartnew),metrics(:,:,:,npartnew),metricderivs(:,:,:,npartnew), &
                      vxyzu(1:3,npartnew),dens(npartnew),vxyzu(4,npartnew),eos_vars(igasP,npartnew),fext(1:3,npartnew))
     if (ind_timesteps) call put_in_smallest_bin(npartnew)
 
@@ -397,7 +397,7 @@ subroutine splitpart(i,npartnew)
     vxyzu(4,i) = uold
     call pack_metric(xyzh(1:3,i),metrics(:,:,:,i))
     call pack_metricderivs(xyzh(1:3,i),metricderivs(:,:,:,i))
-    call get_grforce(xyzh(:,i),metrics(:,:,:,i),metricderivs(:,:,:,i), &
+    call get_grforce(i,xyzh(:,i),metrics(:,:,:,i),metricderivs(:,:,:,i), &
                      vxyzu(1:3,i),dens(i),vxyzu(4,i),eos_vars(igasP,i),fext(1:3,i))
     if (ind_timesteps) call put_in_smallest_bin(i)
 

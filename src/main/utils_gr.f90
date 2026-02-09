@@ -16,7 +16,6 @@ module utils_gr
 !
 ! :Dependencies: io, metric, metric_tools, part
 !
- use metric_tools, only: get_sqrtg
  implicit none
 
  public :: dot_product_gr, get_u0, get_bigv, rho2dens, h2dens, get_geodesic_accel, get_sqrtg, get_sqrt_gamma
@@ -50,7 +49,7 @@ end function dot_product_gr
 !  Function to return U^0, the time component of the 4-velocity
 !+
 !----------------------------------------------------------------
-pure subroutine get_u0(gcov,v,U0,ierr)
+pure subroutine get_u0(gcov,v,U0,ierr,v0)
  real,    intent(in)  :: gcov(0:3,0:3), v(1:3)
  real,    intent(in), optional :: v0
  real,    intent(out) :: U0
@@ -75,7 +74,7 @@ end subroutine get_u0
 !  Function to return V^i, the velocity of an Eulerian observer
 !+
 !----------------------------------------------------------------
-subroutine get_bigv(metrici,v,bigv,bigv2,alpha,lorentz)
+subroutine get_bigv(metrici,v,bigv,bigv2,alpha,lorentz,sqrtg,u0)
  use metric_tools, only:unpack_metric
  use io,           only:fatal
  real, intent(in)  :: metrici(0:3,0:3,2),v(1:3)
@@ -83,11 +82,16 @@ subroutine get_bigv(metrici,v,bigv,bigv2,alpha,lorentz)
  real :: betaUP(1:3),gammaijdown(1:3,1:3)
  integer :: ierror
 
- call unpack_metric(metrici,sqrtg=sqrtg,betaUP=betaUP,alpha=alpha,gammaijdown=gammaijdown)
+ call unpack_metric(metrici,betaUP=betaUP,alpha=alpha,gammaijdown=gammaijdown)
  bigv = (v + betaUP)/alpha
  bigv2 = dot_product_gr(bigv,bigv,gammaijdown)
  if (bigv2 > 1.) call fatal('get_bigv','velocity faster than speed of light -- bigv2',val=bigv2)
  lorentz = 1./sqrt(1.-bigv2)
+ call get_u0(metrici(0:3,0:3,1),v,U0,ierror)
+ call get_sqrtg(metrici(0:3,0:3,1), sqrtg)
+ if (ierror > 0) call fatal('get_u0 in get_bigv','1/sqrt(-v_mu v^mu) ---> non-negative: v_mu v^mu')
+ 
+end subroutine get_bigv
 
 !----------------------------------------------------------------
 !+

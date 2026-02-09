@@ -78,7 +78,7 @@ subroutine prim2consall(npart,xyzh,metrics,vxyzu,pxyzu,use_dens,dens,use_sink)
        vxyzui(1:3) = vxyzu(1:3,i)
        vxyzui(4) = 0. ! assume energy as 0. for sink
        densi = 1.
-       call prim2consi(pmassi,xyzhi,metrics(:,:,:,i),vxyzui,pri,tempi,pxyzu(:,i),ien_type,&
+       call prim2consi(i,pmassi,xyzhi,metrics(:,:,:,i),vxyzui,pri,tempi,pxyzu(:,i),ien_type,&
                    use_sink=use_sink,dens_i=densi) ! this returns temperature and pressure as 0.
     else
        if (.not.isdead_or_accreted(xyzh(4,i))) then
@@ -88,7 +88,7 @@ subroutine prim2consall(npart,xyzh,metrics,vxyzu,pxyzu,use_dens,dens,use_sink)
              pmassi = massoftype(igas)
           endif
 
-          call prim2consi(pmassi,xyzh(:,i),metrics(:,:,:,i),vxyzu(:,i),pri,tempi,pxyzu(:,i),ien_type,&
+          call prim2consi(i,pmassi,xyzh(:,i),metrics(:,:,:,i),vxyzu(:,i),pri,tempi,pxyzu(:,i),ien_type,&
                    use_dens=usedens,dens_i=dens(i))
 
           ! save eos vars for later use
@@ -113,14 +113,14 @@ end subroutine prim2consall
 !  for a single SPH particle
 !+
 !----------------------------------------------------------------------
-subroutine prim2consi(pmassi,xyzhi,metrici,vxyzui,pri,tempi,pxyzui,ien_type,use_dens,use_sink,dens_i)
+subroutine prim2consi(ipart,pmassi,xyzhi,metrici,vxyzui,pri,tempi,pxyzui,ien_type,use_dens,use_sink,dens_i)
  use cons2primsolver, only:primitive2conservative
  use utils_gr,        only:h2dens
  use eos,             only:equationofstate,ieos
  real, dimension(4), intent(in)  :: xyzhi, vxyzui
  real,               intent(in)  :: pmassi,metrici(:,:,:)
  real, intent(inout)             :: pri,tempi
- integer,            intent(in)  :: ien_type
+ integer,            intent(in)  :: ipart,ien_type
  real, dimension(4), intent(out) :: pxyzui
  logical, intent(in), optional   :: use_dens,use_sink
  real, intent(inout), optional   :: dens_i
@@ -183,7 +183,6 @@ subroutine cons2primall(npart,xyzh,metrics,pxyzu,vxyzu,dens,eos_vars)
  if (.not.done_init_eos) call init_eos(ieos,ierr)
 
 !$omp parallel do default (none) &
-<<<<<<< HEAD
 !$omp shared(xyzh,metrics,vxyzu,dens,pxyzu,npart,massoftype,aprmassoftype) &
 !$omp shared(ieos,gamma,eos_vars,ien_type,bxyz,apr_level) &
 !$omp private(i,ierr,spsound,pondens,p_guess,rhoi,tempi,gammai,enthi,pmassi)
@@ -248,7 +247,7 @@ subroutine cons2primall_sink(nptmass,xyzmh_ptmass,metrics_ptmass,pxyzu_ptmass,vx
     rhoi    = 1.
     densi   = 1.
     ! conservative 2 primitive
-    call conservative2primitive(xyzmh_ptmass(1:3,i),metrics_ptmass(:,:,:,i),vxyz_ptmass(1:3,i),densi,eni, &
+    call conservative2primitive(i,xyzmh_ptmass(1:3,i),metrics_ptmass(:,:,:,i),vxyz_ptmass(1:3,i),densi,eni, &
                                 p_guess,tempi,gammai,rhoi,pxyzu_ptmass(1:3,i),pxyzu_ptmass(4,i),ierr,ien_type)
 
     if (ierr > 0) then

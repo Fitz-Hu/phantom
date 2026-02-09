@@ -49,7 +49,6 @@ module metric_tools
  public :: pack_metricderivs
  public :: imetric
  public :: numerical_metric_derivs
- public :: get_sqrtg
 
  private
 
@@ -225,12 +224,11 @@ end subroutine pack_metricderivs
 !  Subroutine to return metric/components from metrici array
 !+
 !-------------------------------------------------------------------------------
-pure subroutine unpack_metric(metrici,gcov,gcon,sqrtg,gammaijdown,gammaijUP,alpha,betadown,betaUP)
+pure subroutine unpack_metric(metrici,gcov,gcon,gammaijdown,gammaijUP,alpha,betadown,betaUP)
  real, intent(in), dimension(0:3,0:3,2) :: metrici
  real, intent(out), dimension(0:3,0:3), optional :: gcov,gcon
  real, intent(out), dimension(1:3,1:3), optional :: gammaijdown,gammaijUP
  real, intent(out),                     optional :: alpha,betadown(3),betaUP(3)
- real, intent(out),                     optional :: sqrtg
  integer :: i
 
  if (present(alpha)) alpha  = sqrt(-1./metrici(0,0,2))
@@ -248,7 +246,6 @@ pure subroutine unpack_metric(metrici,gcov,gcon,sqrtg,gammaijdown,gammaijUP,alph
  if (present(gcon))        gcon        = metrici(0:3,0:3,2)
  if (present(gammaijdown)) gammaijdown = metrici(1:3,1:3,1)
  if (present(betadown))    betadown    = metrici(0,1:3,1)
- if (present(sqrtg))       call get_sqrtg(metrici(0:3,0:3,1),sqrtg)
 
 end subroutine unpack_metric
 

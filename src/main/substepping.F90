@@ -75,7 +75,7 @@ subroutine substep_sph_gr(dt,npart,xyzh,vxyzu,dens,pxyzu,metrics)
        gammai = eos_vars(igamma,i)
        rhoi   = rhoh(xyzh(4,i),massoftype(igas))
 
-       call conservative2primitive(xyzh(1:3,i),metrics(:,:,:,i),vxyzu(1:3,i),dens(i),vxyzu(4,i),&
+       call conservative2primitive(i,xyzh(1:3,i),metrics(:,:,:,i),vxyzu(1:3,i),dens(i),vxyzu(4,i),&
                                       pri,tempi,gammai,rhoi,pxyzu(1:3,i),pxyzu(4,i),ierr,ien_type)
        if (ierr > 0) call warning('cons2primsolver [in substep_sph_gr (a)]','enthalpy did not converge',i=i)
        !
@@ -87,7 +87,7 @@ subroutine substep_sph_gr(dt,npart,xyzh,vxyzu,dens,pxyzu,metrics)
        niter = 0
        do while (.not. converged .and. niter<=nitermax)
           niter = niter + 1
-          call conservative2primitive(xyzh(1:3,i),metrics(:,:,:,i),vxyzu(1:3,i),dens(i),vxyzu(4,i),&
+          call conservative2primitive(i,xyzh(1:3,i),metrics(:,:,:,i),vxyzu(1:3,i),dens(i),vxyzu(4,i),&
                                          pri,tempi,gammai,rhoi,pxyzu(1:3,i),pxyzu(4,i),ierr,ien_type)
           if (ierr > 0) call warning('cons2primsolver [in substep_sph_gr (b)]','enthalpy did not converge',i=i)
           xyzh(1:3,i) = xpred + 0.5*dt*(vxyzu(1:3,i)-vold)
@@ -891,7 +891,7 @@ subroutine get_force(nptmass,npart,nsubsteps,ntypes,timei,dtextforce,xyzh,vxyzu,
           densi = dens(i)
           call equationofstate(ieos,pondensi,spsoundi,densi,xyzh(1,i),xyzh(2,i),xyzh(3,i),tempi,vxyzu(4,i))
           pri = pondensi*densi
-          call get_grforce(xyzh(:,i),metrics(:,:,:,i),metricderivs(:,:,:,i),vxyz,densi,uui,pri,fext_gr,dtf)
+          call get_grforce(i,xyzh(:,i),metrics(:,:,:,i),metricderivs(:,:,:,i),vxyz,densi,uui,pri,fext_gr,dtf)
           fextx = fextx + fext_gr(1)
           fexty = fexty + fext_gr(2)
           fextz = fextz + fext_gr(3)
@@ -1214,7 +1214,7 @@ subroutine kickdrift_gr(dt,npart,nptmass,ntypes,xyzh,vxyzu,pxyzu,dens,metrics,me
        ! since fext includes both the sink-gas interaction and the external force,
        ! we need to work out the "previous" force from the metric derivatives in order
        ! to perform the pmom_iterations
-       call get_grforce(xyzh(:,i),metrics(:,:,:,i),metricderivs(:,:,:,i),vxyz,densi,uui,pri,fstar)
+       call get_grforce(i,xyzh(:,i),metrics(:,:,:,i),metricderivs(:,:,:,i),vxyz,densi,uui,pri,fstar)
        fprev = fstar
        fexti = fexti - fprev
 
@@ -1223,11 +1223,11 @@ subroutine kickdrift_gr(dt,npart,nptmass,ntypes,xyzh,vxyzu,pxyzu,dens,metrics,me
        pmom_iterations: do while (its <= itsmax .and. .not. converged)
           its = its + 1
           pprev = pxyz
-          call conservative2primitive(xyz,metrics(:,:,:,i),vxyz,densi,uui,pri,&
+          call conservative2primitive(i,xyz,metrics(:,:,:,i),vxyz,densi,uui,pri,&
                                       tempi,gammai,rhoi,pxyz,eni,ierr,ien_type)
           if (ierr > 0) call warning('cons2primsolver [in substep_gr gas (a)]','enthalpy did not converge',i=i)
           ! calculate the force on gas particles using new vxyz
-          call get_grforce(xyzh(:,i),metrics(:,:,:,i),metricderivs(:,:,:,i),vxyz,densi,uui,pri,fstar)
+          call get_grforce(i,xyzh(:,i),metrics(:,:,:,i),metricderivs(:,:,:,i),vxyz,densi,uui,pri,fstar)
 
           pxyz = pprev + hdt*(fstar - fprev)
           pmom_err = maxval(abs(pxyz - pprev))
@@ -1243,7 +1243,7 @@ subroutine kickdrift_gr(dt,npart,nptmass,ntypes,xyzh,vxyzu,pxyzu,dens,metrics,me
        perrmax = max(pmom_err,perrmax)
 
        ! recalculate velocity for the new pxyz
-       call conservative2primitive(xyz,metrics(:,:,:,i),vxyz,densi,uui,pri,tempi,&
+       call conservative2primitive(i,xyz,metrics(:,:,:,i),vxyz,densi,uui,pri,tempi,&
                                    gammai,rhoi,pxyz,eni,ierr,ien_type)
        if (ierr > 0) call warning('cons2primsolver [in kickdrift_gr gas (b)]','enthalpy did not converge',i=i)
        xyz = xyz + dt*vxyz
@@ -1261,7 +1261,7 @@ subroutine kickdrift_gr(dt,npart,nptmass,ntypes,xyzh,vxyzu,pxyzu,dens,metrics,me
        xyz_iterations: do while (its <= itsmax .and. .not. converged)
           its      = its + 1
           xyz_prev = xyz
-          call conservative2primitive(xyz,metrics(:,:,:,i),vxyz_star,densi,uui,&
+          call conservative2primitive(i,xyz,metrics(:,:,:,i),vxyz_star,densi,uui,&
                                       pri,tempi,gammai,rhoi,pxyz,eni,ierr,ien_type)
           if (ierr > 0) call warning('cons2primsolver [in kickdrift_gr gas (c)]','enthalpy did not converge',i=i)
           xyz  = xyz_prev + hdt*(vxyz_star - vxyz)
@@ -1393,7 +1393,7 @@ subroutine kickdrift_grsink(dt,nptmass,xyzmh_ptmass,vxyz_ptmass,pxyzu_ptmass,&
        ! since fext includes both the sink-gas interaction and the external force,
        ! we need to work out the "previous" force from the metric derivatives in order
        ! to perform the pmom_iterations
-       call get_grforce(xyzhi,metrics_ptmass(:,:,:,i),metricderivs_ptmass(:,:,:,i),vxyz,densi,uui,pri,fstar)
+       call get_grforce(i,xyzhi,metrics_ptmass(:,:,:,i),metricderivs_ptmass(:,:,:,i),vxyz,densi,uui,pri,fstar)
        fprev = fstar
        fexti = fexti - fprev
        ! Note: grforce needs derivatives of the metric,
@@ -1402,10 +1402,10 @@ subroutine kickdrift_grsink(dt,nptmass,xyzmh_ptmass,vxyz_ptmass,pxyzu_ptmass,&
           its   = its + 1
           pprev = pxyz
           ! calculate the velocity for new pxyz value
-          call conservative2primitive(xyzhi(1:3),metrics_ptmass(:,:,:,i),vxyz,densi,uui,pri,&
+          call conservative2primitive(i,xyzhi(1:3),metrics_ptmass(:,:,:,i),vxyz,densi,uui,pri,&
                                       tempi,gammai,rhoi,pxyz,eni,ierr,1)
           if (ierr > 0) call warning('cons2primsolver [in substep_gr sink(a)]','enthalpy did not converge',i=i)
-          call get_grforce(xyzhi,metrics_ptmass(:,:,:,i),metricderivs_ptmass(:,:,:,i),vxyz,densi,uui,pri,fstar)
+          call get_grforce(i,xyzhi,metrics_ptmass(:,:,:,i),metricderivs_ptmass(:,:,:,i),vxyz,densi,uui,pri,fstar)
 
           ! updated pxyz
           pxyz = pprev + hdt*(fstar - fprev)
@@ -1422,7 +1422,7 @@ subroutine kickdrift_grsink(dt,nptmass,xyzmh_ptmass,vxyz_ptmass,pxyzu_ptmass,&
        perrmax = max(pmom_err,perrmax)
 
        ! recalculate velocity for new momentum array
-       call conservative2primitive(xyzhi(1:3),metrics_ptmass(:,:,:,i),vxyz,densi,uui,pri,tempi,&
+       call conservative2primitive(i,xyzhi(1:3),metrics_ptmass(:,:,:,i),vxyz,densi,uui,pri,tempi,&
                                    gammai,rhoi,pxyz,eni,ierr,1)
        if (ierr > 0) call warning('cons2primsolver [in substep_gr sink(b)]','enthalpy did not converge',i=i)
 
@@ -1441,7 +1441,7 @@ subroutine kickdrift_grsink(dt,nptmass,xyzmh_ptmass,vxyz_ptmass,pxyzu_ptmass,&
           its      = its + 1
           xyz_prev = xyzhi(1:3)
 
-          call conservative2primitive(xyzhi(1:3),metrics_ptmass(:,:,:,i),vxyz_star,densi,uui,&
+          call conservative2primitive(i,xyzhi(1:3),metrics_ptmass(:,:,:,i),vxyz_star,densi,uui,&
                                       pri,tempi,gammai,rhoi,pxyz,eni,ierr,1)
           if (ierr > 0) call warning('cons2primsolver [in substep_gr sink(c)]','enthalpy did not converge',i=i)
 

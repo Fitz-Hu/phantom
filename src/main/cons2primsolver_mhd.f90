@@ -75,7 +75,7 @@ end subroutine get_u
 !+
 !----------------------------------------------------------------
 subroutine primitive2conservative(ipart,x,metrici,v,dens,u,P,rho,pmom,en,ien_type)
- use utils_gr,     only:get_u0,dot_product_gr,get_b0
+ use utils_gr,     only:get_u0,dot_product_gr,get_b0,get_sqrtg
  use metric_tools, only:unpack_metric
  use io,           only:error
  use eos,          only:gmw
@@ -96,7 +96,8 @@ subroutine primitive2conservative(ipart,x,metrici,v,dens,u,P,rho,pmom,en,ien_typ
  enth = 1. + u + P/dens
 
  ! get determinant of metric
- call unpack_metric(metrici,sqrtg=sqrtg,gcov=gcov)
+ call unpack_metric(metrici,gcov=gcov)
+ call get_sqrtg(gcov, sqrtg)
  call get_u0(gcov,v,U0,ierror)
  if (ierror > 0) call error('get_u0 in prim2cons','1/sqrt(-v_mu v^mu) ---> non-negative: v_mu v^mu')
  rho = sqrtg*dens*U0
@@ -137,7 +138,7 @@ end subroutine primitive2conservative
 !+
 !----------------------------------------------------------------
 subroutine conservative2primitive(ipart,x,metrici,v,dens,u,P,temp,gamma,rho,pmom,en,ierr,ien_type)
- use utils_gr,     only:get_u0,dot_product_gr,get_b0
+ use utils_gr,     only:get_u0,dot_product_gr,get_b0,get_sqrtg
  use metric_tools, only:unpack_metric
  use io,           only:fatal,warning
  use part,         only:Bxyz,Bevol,bxyzd
@@ -159,7 +160,8 @@ subroutine conservative2primitive(ipart,x,metrici,v,dens,u,P,temp,gamma,rho,pmom
  ierr = 0
 
  ! Get metric components from metric array
- call unpack_metric(metrici,sqrtg=sqrtg,gcov=gcov,gcon=gcon)
+ call unpack_metric(metrici,gcov=gcov,gcon=gcon)
+ call get_sqrtg(gcov,sqrtg)
  sqrtg_inv = 1./sqrtg
 
  bevoli = bevol(1:3,ipart)
@@ -243,7 +245,6 @@ subroutine conservative2primitive(ipart,x,metrici,v,dens,u,P,temp,gamma,rho,pmom
  enddo
 
  if (.not.converged) ierr = 1
-
  v3d = rhog*(enth*pmom + bcons_down*bconspmom)/ (enth*(enth+bcons2))
  v0d = (1. - dot_product(gcon(0,1:3),v3d))/gcon(0,0)
  call get_u0(gcon,v3d,U0,ierror,v0d)

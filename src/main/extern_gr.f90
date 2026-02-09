@@ -89,11 +89,11 @@ subroutine get_grforce_all(npart,xyzh,metrics,metricderivs,vxyzu,fext,dtexternal
        vxyzui(4)   = 0.
        pi = 0.
        densi = 1.
-       call get_grforce(xyzhi,metrics(:,:,:,i),metricderivs(:,:,:,i),vxyzui(1:3),densi,vxyzui(4),pi,fext(1:3,i),dtf)
+       call get_grforce(i,xyzhi,metrics(:,:,:,i),metricderivs(:,:,:,i),vxyzui(1:3),densi,vxyzui(4),pi,fext(1:3,i),dtf)
     else
        if (.not.isdead_or_accreted(xyzh(4,i))) then
           pi = get_pressure(ieos,xyzh(:,i),dens(i),vxyzu(:,i))
-          call get_grforce(xyzh(:,i),metrics(:,:,:,i),metricderivs(:,:,:,i),vxyzu(1:3,i),dens(i),vxyzu(4,i),pi,fext(1:3,i),dtf)
+          call get_grforce(i,xyzh(:,i),metrics(:,:,:,i),metricderivs(:,:,:,i),vxyzu(1:3,i),dens(i),vxyzu(4,i),pi,fext(1:3,i),dtf)
        endif
     endif
     dtexternal = min(dtexternal,C_force*dtf)
