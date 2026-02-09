@@ -1,6 +1,6 @@
 !--------------------------------------------------------------------------!
 ! The Phantom Smoothed Particle Hydrodynamics code, by Daniel Price et al. !
-! Copyright (c) 2007-2024 The Authors (see AUTHORS)                        !
+! Copyright (c) 2007-2025 The Authors (see AUTHORS)                        !
 ! See LICENCE file for usage and distribution conditions                   !
 ! http://phantomsph.github.io/                                             !
 !--------------------------------------------------------------------------!
@@ -23,6 +23,7 @@ module eos_gasradrec
  public :: equationofstate_gasradrec,calc_uT_from_rhoP_gasradrec,read_options_eos_gasradrec,&
            write_options_eos_gasradrec,eos_info_gasradrec,init_eos_gasradrec
  private
+ real, parameter :: eoserr=1.e-15,W4err=1.e-2
 
 contains
 !-----------------------------------------------------------------------
@@ -39,7 +40,6 @@ subroutine equationofstate_gasradrec(d,eint,T,imu,X,Y,p,cf,gamma_eff)
  real, intent(in)    :: X,Y
  real, intent(out)   :: p,cf,gamma_eff
  real                :: corr,erec,derecdT,dimurecdT,Tdot,logd,dt,Tguess
- real, parameter     :: W4err=1.e-2,eoserr=1.e-13
  integer, parameter  :: nmax = 500
  integer n
 
@@ -62,13 +62,15 @@ subroutine equationofstate_gasradrec(d,eint,T,imu,X,Y,p,cf,gamma_eff)
        T = T-corr
        Tdot = 0.
     endif
-    if (abs(corr)<eoserr*T) exit
+    if (abs(corr)<max(eoserr*T,eoserr)) exit
     if (n>50) dt=0.5
  enddo
  if (n > nmax) then
     print*,'d=',d,'eint=',eint/d,'Tguess=',Tguess,'mu=',1./imu,'T=',T,'erec=',erec
+    print*,'n = ',n,' nmax = ',n,' correction is ',abs(corr),' needs to be < ',eoserr*T
     call fatal('eos_gasradrec','Failed to converge on temperature in equationofstate_gasradrec')
  endif
+ call get_erec_imurec(logd,T,X,Y,erec,imu)
  p = ( Rg*imu*d + radconst*T**3/3. )*T
  gamma_eff = 1.+p/(eint-d*erec)
  cf = sqrt(gamma_eff*p/d)
@@ -92,7 +94,6 @@ subroutine calc_uT_from_rhoP_gasradrec(rhoi,presi,X,Y,T,eni,mui,ierr)
  integer, intent(out)        :: ierr
  integer                     :: n
  real                        :: logrhoi,imu,dimurecdT,dT,Tdot,corr
- real, parameter             :: W4err=1.e-2,eoserr=1.e-13
 
  if (T <= 0.) T = min((3.*presi/radconst)**0.25, presi/(rhoi*Rg))  ! initial guess for temperature
  ierr = 0

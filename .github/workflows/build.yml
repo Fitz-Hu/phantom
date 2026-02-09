@@ -11,8 +11,6 @@ on:
     paths-ignore:
       - 'docs/**'
       - 'README.md'
-#  schedule:
-#    - cron: "0 0 * * *"
 
 env:
   OMP_STACKSIZE: 512M
@@ -22,20 +20,17 @@ env:
   WEB_SERVER: data.phantom.cloud.edu.au
   WEB_HTML_DIR: /var/www/html
   BUILD_LOG_DIR: /ci/build/logs
-  RSYNC_RSH: ssh -o "StrictHostKeyChecking=no" -o "UserKnownHostsFile=/dev/null"
   NPARALLEL: 32
 
 jobs:
   matrix_prep:
-    # Skip scheduled runs on forks
-    if: ${{ github.event_name != 'schedule' || github.repository == 'danieljprice/phantom' }}
     runs-on: ubuntu-latest
     outputs:
       batch: ${{ steps.set-sequence.outputs.batch }}
       nbatch: ${{ steps.set-sequence.outputs.nbatch }}
     steps:
     - name: Check out repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Generate sequence of batch numbers for normal tests, or run sequentially for scheduled tests
       id: set-sequence
       run: |
@@ -54,8 +49,10 @@ jobs:
       fail-fast: false
       matrix:
         system:
+          - aocc
           - gfortran
           - ifort
+          - ifx
         batch: ${{ fromJson(needs.matrix_prep.outputs.batch) }}
 
     name: build (batch ${{ matrix.batch }}/${{ needs.matrix_prep.outputs.nbatch }}, SYSTEM=${{ matrix.system }})
@@ -70,40 +67,45 @@ jobs:
     - name: Update package list
       run: sudo apt-get update
 
-    - name: Setup Intel repo
-      if: matrix.system == 'ifort'
-      id: intel-repo
-      run: |
-        wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
-        sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
-        rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
-        sudo echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
-        sudo apt-get update
-        INTELVERSION=$(apt-cache show intel-oneapi-compiler-fortran | grep Version | head -1)
-        echo "::set-output name=intelversion::$INTELVERSION"
-
-    - name: Cache intel installation
-      if: matrix.system == 'ifort'
-      id: cache-intel
-      uses: actions/cache@v3
+    - name: Setup Intel compiler
+      if: matrix.system == 'ifort' || matrix.system == 'ifx'
+      uses: fortran-lang/setup-fortran@v1
       with:
-        path: |
-          /opt/intel
-        key: ${{ steps.intel-repo.outputs.intelversion }}
+          compiler: ${{ matrix.system == 'ifort' && 'intel-classic' || 'intel' }}
 
-    - name: Install Intel compilers
-      if: ${{ steps.cache-intel.outputs.cache-hit != 'true' && matrix.system == 'ifort' }}
+    - name: Install AOCC compiler
+      if: matrix.system == 'aocc'
+      id: aocc-install
       run: |
-        sudo apt-get install -y intel-oneapi-common-vars
-        sudo apt-get install -y intel-oneapi-compiler-fortran
-        sudo apt-get install -y intel-oneapi-mpi
-        sudo apt-get install -y intel-oneapi-mpi-devel
-
-    - name: Setup Intel oneAPI environment
-      if: matrix.system == 'ifort'
-      run: |
-        source /opt/intel/oneapi/setvars.sh
-        printenv >> $GITHUB_ENV
+        REPO_NAME=aocc_flang
+        TMP_DIR="$(mktemp -d)"
+        cd "$TMP_DIR" || exit 42
+        git clone https://github.com/zaikunzhang/"$REPO_NAME".git
+        cd "$REPO_NAME" || exit 42
+        AOCC_7Z="aocc_flang.deb.7z.001"
+        7za x "$AOCC_7Z" -aoa  # -aoa: overwrite all existing files without prompt
+        sudo apt update && sudo apt install p7zip-full libncurses* -y  # libncurses* needed for libtinfo.so
+        sudo dpkg -i "$TMP_DIR"/"$REPO_NAME"/aocc_flang.deb
+        rm -rf "$TMP_DIR"
+        # Run the script that sets the necessary environment variables and then damp them to $GITHUB_ENV
+        # so that they are available in subsequent steps.
+        if [[ -d /opt/AMD ]] ; then
+            AOCCDIR="$(find /opt/AMD -maxdepth 1 -name "aocc-compiler*" -type d -print | sort | tail -n 1)"
+            AOCC_ENVSH="$(find "$AOCCDIR" -name "*setenv*.sh" -type f)"
+            #shellcheck disable=SC1090
+            source "$AOCC_ENVSH"
+            AFLANG="$(find "$AOCCDIR" -type f -executable -name "clang-*" | grep -E "clang-[0-9]{2}" | head -1)"
+            if [[ -n "$AFLANG" ]] ; then sudo ln -s "$AFLANG" "$(dirname "$AFLANG")"/aflang ; fi
+            export PATH=$(dirname "$AFLANG"):$PATH
+        else
+            exit 1
+        fi
+        env | grep -i 'aocc\|AMD' >> "$GITHUB_ENV"
+        # Show the result of the installation.
+        echo "The AOCC flang installed is:"
+        aflang --version
+        echo "The path to AOCC flang is:"
+        command -v aflang
 
     - name: Install numpy and matplotlib for analysis unit tests
       run: |
@@ -111,10 +113,10 @@ jobs:
         sudo apt-get install -y python3-matplotlib
 
     - name: "Clone phantom"
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: "Grab a copy of splash source code"
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: danieljprice/splash
         path: splash
@@ -123,35 +125,12 @@ jobs:
       if: github.event_name == 'schedule'
       run: mkdir logs
 
-#    - name: "Grab previous build logs from web server"
-#      if: github.event_name == 'schedule'
-#      env:
-#        WGET: wget --recursive --no-parent --reject "index.html*" --cut-dirs=2 --no-host-directories
-#      run: ${WGET} -A '*${{ matrix.system[1] }}.txt' http://${WEB_SERVER}${BUILD_LOG_DIR}/ || true
-
     - name: "Run buildbot.sh"
-      run: ./buildbot.sh --maxdim 17000000 --url http://${WEB_SERVER}/${BUILD_LOG_DIR} --parallel ${{ matrix.batch }} ${{ env.NPARALLEL }}
+      run: ./buildbot.sh --url http://${WEB_SERVER}/${BUILD_LOG_DIR} --parallel ${{ matrix.batch }} ${{ env.NPARALLEL }}
       working-directory: scripts
       env:
         SYSTEM: ${{ matrix.system }}
         RETURN_ERR: yes
-
-#    - name: "Install SSH Key"
-#      if: github.event_name == 'schedule'
-#      uses: webfactory/ssh-agent@v0.5.3
-#      with:
-#        ssh-private-key: ${{ secrets.RUNNER_PRIVATE_KEY }}
-
-#    - name: "Copy new build logs to web server"
-#      if: ${{ (success() || failure()) && github.event_name == 'schedule' }}
-#      run: rsync -vau logs/*.txt ${WEB_USER}@${WEB_SERVER}:${WEB_HTML_DIR}/${BUILD_LOG_DIR}
-
-#    - name: "Copy HTML files to web server"
-#      if: ${{ (success() || failure()) && github.event_name == 'schedule' }}
-#      run: |
-#        export WEB_BUILD_DIR=${WEB_HTML_DIR}/nightly/build/$(date "+%Y%m%d")
-#        ssh -o "StrictHostKeyChecking=no" -o "UserKnownHostsFile=/dev/null" ${WEB_USER}@${WEB_SERVER} -- mkdir -p ${WEB_BUILD_DIR}
-#        rsync -vau logs/*.html ${WEB_USER}@${WEB_SERVER}:${WEB_BUILD_DIR}/
 
     - name: logs/build-failures-${{ matrix.system }}.txt
       if: always()

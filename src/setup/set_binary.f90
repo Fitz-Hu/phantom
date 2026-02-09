@@ -1,6 +1,6 @@
 !--------------------------------------------------------------------------!
 ! The Phantom Smoothed Particle Hydrodynamics code, by Daniel Price et al. !
-! Copyright (c) 2007-2024 The Authors (see AUTHORS)                        !
+! Copyright (c) 2007-2025 The Authors (see AUTHORS)                        !
 ! See LICENCE file for usage and distribution conditions                   !
 ! http://phantomsph.github.io/                                             !
 !--------------------------------------------------------------------------!
@@ -25,7 +25,8 @@ module setbinary
 ! :Dependencies: binaryutils
 !
  implicit none
- public :: set_binary,Rochelobe_estimate,L1_point,get_a_from_period
+ public :: set_binary,Rochelobe_estimate,L1_point,get_a_from_period,get_period_from_a,&
+            get_T_flyby_hyp,get_T_flyby_par,get_flyby_elements
  public :: get_mean_angmom_vector,get_eccentricity_vector
 
  private
@@ -34,6 +35,7 @@ module setbinary
  end interface get_eccentricity_vector
 
  real, parameter :: pi = 4.*atan(1.)
+ real, parameter :: deg_to_rad = pi/180.
  integer, parameter :: &
    ierr_m1   = 1, &
    ierr_m2   = 2, &
@@ -186,19 +188,19 @@ subroutine set_binary(m1,m2,semimajoraxis,eccentricity, &
  if (present(posang_ascnode) .and. present(arg_peri) .and. present(incl)) then
     ! Campbell elements
     ecc = eccentricity
-    omega     = arg_peri*pi/180.
+    omega     = arg_peri*deg_to_rad
     ! our conventions here are Omega is measured East of North
-    big_omega = posang_ascnode*pi/180. + 0.5*pi
-    inc       = incl*pi/180.
+    big_omega = posang_ascnode*deg_to_rad + 0.5*pi
+    inc       = incl*deg_to_rad
 
     if (present(f)) then
        ! get eccentric, parabolic or hyperbolic anomaly from true anomaly
        ! (https://en.wikipedia.org/wiki/Eccentric_anomaly#From_the_true_anomaly)
-       theta = f*pi/180.
+       theta = f*deg_to_rad
        E = get_E_from_true_anomaly(theta,ecc)
     elseif (present(mean_anomaly)) then
        ! get eccentric anomaly from mean anomaly by solving Kepler equation
-       bigM = mean_anomaly*pi/180.
+       bigM = mean_anomaly*deg_to_rad
        E = get_E_from_mean_anomaly(bigM,ecc)
     else
        ! set binary at apastron
@@ -324,7 +326,7 @@ subroutine set_binary(m1,m2,semimajoraxis,eccentricity, &
 ! rotate if inclination is non-zero
 !
  if (present(incl) .and. .not.(present(arg_peri) .and. present(posang_ascnode))) then
-    xangle = incl*pi/180.
+    xangle = incl*deg_to_rad
     cosi = cos(xangle)
     sini = sin(xangle)
     do i=i1,i2
@@ -405,6 +407,17 @@ function get_a_from_period(m1,m2,period) result(a)
 
 end function get_a_from_period
 
+!-------------------------------------------------------------
+! Function to determine the period given the semi-major axis
+!-------------------------------------------------------------
+function get_period_from_a(m1,m2,a) result(period)
+ real, intent(in) :: m1,m2,a
+ real :: period
+
+ period= sqrt(((2.*pi)**2*a**3)/(m1 + m2))
+
+end function get_period_from_a
+
 !----------------------------------------------------
 ! Eccentricity vector, for second body
 ! https://en.wikipedia.org/wiki/Eccentricity_vector
@@ -484,5 +497,80 @@ pure subroutine get_cross_product(veca,vecb,vecc)
  vecc(3) = veca(1)*vecb(2) - veca(2)*vecb(1)
 
 end subroutine get_cross_product
+
+!------------------------------------------------------------
+! Flyby time for hyperbolic trajectory
+!------------------------------------------------------------
+
+function get_T_flyby_hyp(m1,m2,ecc,f,a) result(T)
+
+real, intent(in) :: m1,m2,ecc,f,a
+real :: T,h,mu,M_h0,G,F0,nu
+
+!--True anomaly in radians
+nu = f * deg_to_rad
+
+!--Gravitational parameter
+G = 1.0
+mu = G * (m1 + m2)
+
+!--Specific angular momentum
+h = sqrt(mu * a * (ecc**2 - 1.0))
+
+!--Eccentric anomaly
+F0 = 2.0 * atanh(sqrt((ecc - 1.0) / (ecc + 1.0)) * tan(nu / 2.0))
+
+!--Mean anomaly
+M_h0 = ecc * sinh(F0) - F0
+
+!--Time of flight
+T = 2.0 * abs((h**3 / mu**2) * (1.0 / (ecc**2 - 1.0)**1.5) * M_h0)
+
+end function get_T_flyby_hyp
+
+!------------------------------------------------------------
+! Flyby time for parabolic trajectory
+!------------------------------------------------------------
+
+function get_T_flyby_par(m1,m2,dma,n0) result(T)
+
+real, intent(in) :: m1,m2,dma,n0
+real :: T,nu,xi,yi,Di,Df,p,mu,G
+
+!--Semi-latus rectum
+p = 2.0 * dma
+
+!--Initial position
+xi = -2.0 * sqrt(n0 - 1.0) * dma
+yi = dma * (1.0 - (xi / p)**2)
+
+!--Gravitational parameter
+G = 1.0
+mu = G * (m1 + m2)
+
+!--True anomaly
+nu = pi - atan(abs(xi / yi))
+
+!--Barker's equation
+Di = tan(-nu / 2.0)
+Df = tan(nu / 2.0)
+
+T = 0.5 * sqrt(p**3 / mu) * (Df + (1.0 / 3.0) * Df**3 - Di - (1.0 / 3.0) * Di**3)
+
+end function get_T_flyby_par
+
+subroutine get_flyby_elements(flyby_q,flyby_e,flyby_d,flyby_a,flyby_f)
+real, intent(in) :: flyby_q,flyby_e,flyby_d
+real, intent(out) :: flyby_a,flyby_f
+
+if (flyby_e > 1.) then
+   flyby_a = -flyby_q / (1.-flyby_e) !--semimajor axis: positive
+   flyby_f = -abs(acos((flyby_a * (flyby_e * flyby_e-1.0)) / (flyby_e * flyby_d) - (1.0 / flyby_e)) * 180./pi)
+else
+   flyby_a = flyby_q
+   flyby_f = -abs(acos(((2.0 * flyby_q / flyby_d) - 1.0) / flyby_e)) * 180./pi
+endif
+
+end subroutine get_flyby_elements
 
 end module setbinary

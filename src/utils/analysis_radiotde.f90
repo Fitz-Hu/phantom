@@ -1,6 +1,6 @@
 !--------------------------------------------------------------------------!
 ! The Phantom Smoothed Particle Hydrodynamics code, by Daniel Price et al. !
-! Copyright (c) 2007-2024 The Authors (see AUTHORS)                        !
+! Copyright (c) 2007-2025 The Authors (see AUTHORS)                        !
 ! See LICENCE file for usage and distribution conditions                   !
 ! http://phantomsph.github.io/                                             !
 !--------------------------------------------------------------------------!
@@ -14,6 +14,7 @@ module analysis
 !
 ! :Runtime parameters:
 !   - drad_cap  : *capture thickness (in cm) (-ve for all particles at outer radius)*
+!   - npart_tde : *npart in tde sims (-ve=10*npart of cnm)*
 !   - phi_max   : *max phi (in deg)*
 !   - phi_min   : *min phi (in deg)*
 !   - rad_cap   : *capture inner radius (in cm)*
@@ -22,7 +23,7 @@ module analysis
 !   - v_max     : *max velocity (in c)*
 !   - v_min     : *min velocity (in c)*
 !
-! :Dependencies: infile_utils, io, physcon, readwrite_dumps, units
+! :Dependencies: infile_utils, io, part, physcon, readwrite_dumps, units
 !
  implicit none
  character(len=8), parameter, public :: analysistype = 'radiotde'
@@ -34,15 +35,15 @@ module analysis
  real, dimension(:), allocatable    :: rad_all,vr_all,v_all
  real, dimension(:), allocatable    :: theta,plot_theta,phi,vr,vtheta,vphi
  logical, dimension(:), allocatable :: cap
- real    :: m_accum, m_cap 
+ real    :: m_accum, m_cap
  real    :: vr_accum_mean, vr_accum_max, vr_cap_mean, vr_cap_max
  real    :: r_accum_maxv, r_cap_maxv
  real    :: v_accum_mean, v_cap_mean
  real    :: e_accum, e_cap
  integer :: n_accum, n_cap
- real    :: shock_v, rad_min, rad_max, shock_e, shock_m!, shock_rho
- real    :: shock_v_tde, rad_min_tde, rad_max_tde, shock_e_tde, shock_m_tde!, shock_rho
- real    :: shock_v_cnm, rad_min_cnm, rad_max_cnm, shock_e_cnm, shock_m_cnm!, shock_rho
+ real    :: shock_v, rad_min, rad_max, shock_e, shock_m, shock_u, shock_g!, shock_rho
+ real    :: shock_v_tde, rad_min_tde, rad_max_tde, shock_e_tde, shock_m_tde, shock_u_tde!, shock_rho
+ real    :: shock_v_cnm, rad_min_cnm, rad_max_cnm, shock_e_cnm, shock_m_cnm, shock_u_cnm!, shock_rho
 
  !---- These can be changed in the params file
  real    :: rad_cap = 1.e16 ! radius where the outflow in captured (in cm)
@@ -106,10 +107,10 @@ subroutine do_analysis(dumpfile,numfile,xyzh,vxyzu,pmass,npart,time,iunit)
  endif
 
  ! read background entropy
- if (npart_cnm < 0) then 
+ if (npart_cnm < 0) then
     if (npart_tde_reserve < 0) npart_tde_reserve = 10*npart
     allocate(ent_bg(npart_tde_reserve+npart)) ! save more memory for later injection
-    npart_cnm = npart 
+    npart_cnm = npart
     call record_background(pxyzu(4,:),0,npart,ent_bg)
     write(*,'(I9,1x,a16)') npart_cnm, 'particles in CNM'
  endif
@@ -140,7 +141,7 @@ subroutine do_analysis(dumpfile,numfile,xyzh,vxyzu,pmass,npart,time,iunit)
     allocate(theta(npart),plot_theta(npart),phi(npart),vr(npart),vtheta(npart), &
              vphi(npart),cap(npart))
     cap = .false.
-    
+
     call outflow_analysis(npart,pmass,xyzh,vxyzu,rad_all,vr_all,v_all)
 
     if (n_cap > 0) then
@@ -193,15 +194,14 @@ subroutine do_analysis(dumpfile,numfile,xyzh,vxyzu,pmass,npart,time,iunit)
         v_cap_mean, &
         e_accum*unit_energ, &
         e_cap*unit_energ
-    close(iunit) 
+    close(iunit)
 
     write(*,'(I8,1X,A2,1X,I8,1X,A34)') n_cap, 'of', npart, 'particles are in the capture shell'
     write(*,'(I8,1X,A2,1X,I8,1X,A40)') n_accum, 'of', npart, 'particles are outside the capture radius'
 
  case ('shock')
     write(*,'(a)') ' Analysing the shock ...'
-    
-    call shock_analysis(npart,pmass,rad_all,vr_all,pxyzu(4,:))
+    call shock_analysis(npart,pmass,rad_all,vr_all,vxyzu(4,:),pxyzu(4,:))
 
     deallocate(rad_all,vr_all,v_all)
 
@@ -210,23 +210,27 @@ subroutine do_analysis(dumpfile,numfile,xyzh,vxyzu,pmass,npart,time,iunit)
        open(iunit,file='shock',status='old',position='append')
     else
        open(iunit,file='shock',status='new')
-       write(iunit,'(17(A,1x))') '#', 'time', 'rad_min[cm]', 'rad_max[cm]', 'velocity[c]', 'mass[Msun]', 'energy[erg]', & !'density[g/cm-3]'
-                                             'rad_min_tde[cm]', 'rad_max_tde[cm]', 'vel_tde[c]', 'mass_tde[Msun]', 'ene_tde[erg]', &
-                                             'rad_min_cnm[cm]', 'rad_max_cnm[cm]', 'vel_cnm[c]', 'mass_cnm[Msun]', 'ene_cnm[erg]'
+       write(iunit,'(21(A,1x))') '#', 'time', 'rad_min[cm]', 'rad_max[cm]', 'velocity[c]', 'mass[Msun]', 'ki_ene[erg]', 'u[erg]', & !'density[g/cm-3]'
+                                             'grav[erg]', 'rad_min_tde[cm]', 'rad_max_tde[cm]', 'vel_tde[c]', 'mass_tde[Msun]', &
+                                             'ki_ene_tde[erg]', 'u_tde[erg]', &
+                                             'rad_min_cnm[cm]', 'rad_max_cnm[cm]', 'vel_cnm[c]', 'mass_cnm[Msun]', &
+                                             'ki_ene_cnm[erg]', 'u_cnm[erg]'
     endif
     if (rad_max > 0.) then
-    write(iunit,'(16(es18.10,1x))') &
+    write(iunit,'(20(es18.10,1x))') &
        time*todays, &
-       rad_min*udist, rad_max*udist, shock_v, shock_m*umass/solarm, shock_e*unit_energ, &
-       rad_min_tde*udist, rad_max_tde*udist, shock_v_tde, shock_m_tde*umass/solarm, shock_e_tde*unit_energ, &
-       rad_min_cnm*udist, rad_max_cnm*udist, shock_v_cnm, shock_m_cnm*umass/solarm, shock_e_cnm*unit_energ !shock_rho*unit_density
+       rad_min*udist, rad_max*udist, shock_v, shock_m*umass/solarm, shock_e*unit_energ, shock_u*unit_energ, &
+       shock_g*unit_energ, rad_min_tde*udist, rad_max_tde*udist, shock_v_tde, &
+       shock_m_tde*umass/solarm, shock_e_tde*unit_energ, shock_u_tde*unit_energ, &
+       rad_min_cnm*udist, rad_max_cnm*udist, shock_v_cnm, &
+       shock_m_cnm*umass/solarm, shock_e_cnm*unit_energ, shock_u_cnm*unit_energ !shock_rho*unit_density
     endif
     close(iunit)
 
-  case default
+ case default
     write(*,'(a)') " Unknown analysis type. Do 'outflow' or 'shock'"
     stop
-  end select
+ end select
 
 end subroutine do_analysis
 
@@ -282,11 +286,11 @@ subroutine outflow_analysis(npart,pmass,xyzh,vxyzu,rad_all,vr_all,v_all)
        vri = vr_all(i)
        vr_accum_add = vr_accum_add + vri
        v_accum_add = v_accum_add + v
-       if (vri > vr_accum_max) then 
+       if (vri > vr_accum_max) then
           vr_accum_max = vri
           r_accum_maxv = r
        endif
-       if (r-rad_cap < drad_cap .and. (v .ge. v_min .and. v .le. v_max)) then
+       if (r-rad_cap < drad_cap .and. (v  >=  v_min .and. v  <=  v_max)) then
           thetai = atan2d(y,x)
           phii = atan2d(z,sqrt(x**2+y**2))
           if ((thetai  >=  theta_min .and. thetai  <=  theta_max) .and. (phii  >=  phi_min .and. phii  <=  phi_max)) then
@@ -302,7 +306,7 @@ subroutine outflow_analysis(npart,pmass,xyzh,vxyzu,rad_all,vr_all,v_all)
              e_cap = e_cap + 0.5*pmass*v**2
              vr_cap_add = vr_cap_add + vri
              v_cap_add = v_cap_add + v
-             if (vri > vr_cap_max) then 
+             if (vri > vr_cap_max) then
                 vr_cap_max = vri
                 r_cap_maxv = r
              endif
@@ -325,22 +329,22 @@ subroutine record_background(ent,npart_old,npart_new,ent_bg)
  integer             :: i
 
  print*, 'Record background entropy of ', npart_new, ' particles'
- 
+
  do i=1,npart_new
-    ent_bg(npart_old+i) = ent(npart_old+i)*1.1 ! give some range for self evolution 
+    ent_bg(npart_old+i) = ent(npart_old+i)*1.3 ! give some range for self evolution
                                                    !(is there a reasonable choice instead of arbitrary?)
  enddo
 
 end subroutine record_background
 
-subroutine shock_analysis(npart,pmass,rad_all,vr_all,ent)
+subroutine shock_analysis(npart,pmass,rad_all,vr_all,u,ent)
  use units,   only: udist
  use physcon, only: au,pi
  integer, intent(in) :: npart
- real, intent(in) :: pmass,rad_all(:),vr_all(:),ent(:)
+ real, intent(in) :: pmass,rad_all(:),vr_all(:),ent(:),u(:)
  integer :: i,n,n_cnm,n_tde
- real    :: ri,half_m,ei,vi
- ! 
+ real    :: ri,half_m,ei,vi,ui
+ !
  !------Determine the shock
  !
  n = 0
@@ -349,6 +353,9 @@ subroutine shock_analysis(npart,pmass,rad_all,vr_all,ent)
  shock_e = 0.
  shock_e_cnm = 0.
  shock_e_tde = 0.
+ shock_u = 0.
+ shock_u_cnm = 0.
+ shock_u_tde = 0.
  shock_v = 0. ! take max vel
  shock_v_cnm = 0.
  shock_v_tde = 0.
@@ -365,11 +372,14 @@ subroutine shock_analysis(npart,pmass,rad_all,vr_all,ent)
        ri = rad_all(i)
        vi = vr_all(i)
        ei = half_m*vi**2
+       ui = u(i)*pmass
        n = n + 1
        if (vi > shock_v) shock_v = vi
        if (ri < rad_min) rad_min = ri
        if (ri > rad_max) rad_max = ri
        shock_e = shock_e + ei
+       shock_u = shock_u + ui
+       shock_g = pmass/ri
 
        if (i > npart_cnm) then
           ! tde outflow
@@ -378,6 +388,7 @@ subroutine shock_analysis(npart,pmass,rad_all,vr_all,ent)
           if (ri < rad_min_tde) rad_min_tde = ri
           if (ri > rad_max_tde) rad_max_tde = ri
           shock_e_tde = shock_e_tde + ei
+          shock_u_tde = shock_u_tde + ui
        else
           ! cnm
           n_cnm = n_cnm + 1
@@ -385,6 +396,7 @@ subroutine shock_analysis(npart,pmass,rad_all,vr_all,ent)
           if (ri < rad_min_cnm) rad_min_cnm = ri
           if (ri > rad_max_cnm) rad_max_cnm = ri
           shock_e_cnm = shock_e_cnm + ei
+          shock_u_cnm = shock_u_cnm + ui
        endif
     endif
  enddo

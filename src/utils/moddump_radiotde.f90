@@ -1,6 +1,6 @@
 !--------------------------------------------------------------------------!
 ! The Phantom Smoothed Particle Hydrodynamics code, by Daniel Price et al. !
-! Copyright (c) 2007-2024 The Authors (see AUTHORS)                        !
+! Copyright (c) 2007-2025 The Authors (see AUTHORS)                        !
 ! See LICENCE file for usage and distribution conditions                   !
 ! http://phantomsph.github.io/                                             !
 !--------------------------------------------------------------------------!
@@ -14,7 +14,9 @@ module moddump
 !
 ! :Runtime parameters:
 !   - ieos             : *equation of state used*
-!   - ignore_radius    : *tde particle inside this radius will be ignored*
+!   - ignore_radius    : *ignore tde particle inside this radius (-ve = ignore all for injection)*
+!   - m_target         : *target mass in circumnuclear gas cloud (in Msun) (-ve = ignore and use rho0)*
+!   - m_threshold      : *threshold in solving rho0 for m_target (in Msun)*
 !   - mu               : *mean molecular density of the cloud*
 !   - nbreak           : *number of broken power laws*
 !   - nprof            : *number of data points in the cloud profile*
@@ -23,7 +25,7 @@ module moddump
 !   - rad_min          : *inner radius of the circumnuclear gas cloud*
 !   - remove_overlap   : *remove outflow particles overlap with circum particles*
 !   - rhof_n_1         : *power law index of the section*
-!   - rhof_rho0        : *density at rad_min (in g/cm^3)*
+!   - rhof_rho0        : *density at rad_min (in g/cm^3) (-ve = ignore and calc for m_target)*
 !   - temperature      : *temperature of the gas cloud (-ve = read from file)*
 !   - use_func         : *if use broken power law for density profile*
 !
@@ -56,10 +58,11 @@ subroutine modify_dump(npart,npartoftype,massoftype,xyzh,vxyzu)
  use physcon,      only:solarm,years,mass_proton_cgs,kb_on_mh,kboltz,radconst
  use setup_params, only:npart_total
  use part,         only:igas,set_particle_type,pxyzu,delete_particles_inside_radius, &
-                        delete_particles_outside_sphere,kill_particle,shuffle_part
+                        delete_particles_outside_sphere,kill_particle,shuffle_part, &
+                        eos_vars,itemp,igamma,igasP
  use io,           only:fatal,master,id
- use units,        only:umass,udist,utime,set_units,unit_density,unit_ergg
- use timestep,     only:dtmax,tmax
+ use units,        only:umass,udist,utime,set_units,unit_density
+ use timestep,     only:dtmax,tmax,idtmax_frac,dtmax_ifactor,idtmax_n
  use eos,          only:ieos,gmw
  use kernel,       only:hfact_default
  use stretchmap,   only:get_mass_r
@@ -72,7 +75,7 @@ subroutine modify_dump(npart,npartoftype,massoftype,xyzh,vxyzu)
  real,              intent(inout)   :: massoftype(:)
  integer                       :: i,ierr,iunit=12,iprof
  integer                       :: np_sphere,npart_old
- real                          :: totmass,delta,r
+ real                          :: totmass,delta,r,rhofr,presi
  character(len=120)            :: fileset,fileprefix='radio'
  logical                       :: read_temp,setexists
  real, allocatable             :: masstab(:),temp_prof(:)
@@ -89,7 +92,7 @@ subroutine modify_dump(npart,npartoftype,massoftype,xyzh,vxyzu)
 
  !--Set default values
  temperature       = 10.           ! Temperature in Kelvin
- mu                = 2.            ! mean molecular weight
+ mu                = 1.            ! mean molecular weight
  ieos_in           = 2
  ignore_radius     = 1.e14          ! in cm
  use_func          = .true.
@@ -106,7 +109,7 @@ subroutine modify_dump(npart,npartoftype,massoftype,xyzh,vxyzu)
  rhof_rbreak       = rad_min
  m_target          = dot_product(npartoftype,massoftype)*umass/solarm
  m_threshold       = 1.e-3
- 
+
  !--Profile default setups
  read_temp         = .false.
  profile_filename  = default_name
@@ -169,6 +172,7 @@ subroutine modify_dump(npart,npartoftype,massoftype,xyzh,vxyzu)
  endif
  ieos = ieos_in
  gmw = mu
+ write(*,'(a,1x,i2)') ' Using eos =', ieos
 
  !--Everything to code unit
  ignore_radius = ignore_radius/udist
@@ -195,7 +199,7 @@ subroutine modify_dump(npart,npartoftype,massoftype,xyzh,vxyzu)
     else
        call fatal('moddump','Must give rho0 or m_target')
     endif
- endif 
+ endif
 
  !--remove unwanted particles
  if (ignore_radius > 0) then
@@ -230,15 +234,24 @@ subroutine modify_dump(npart,npartoftype,massoftype,xyzh,vxyzu)
  do i = npart_old+1,npart
     call set_particle_type(i,igas)
     r = sqrt(dot_product(xyzh(1:3,i),xyzh(1:3,i)))
-    if (read_temp) temperature = get_temp_r(r,rad_prof,temp_prof)       
-    vxyzu(4,i) = uerg(rhof(r),temperature)
+    rhofr = rhof(r)
+    if (read_temp) temperature = get_temp_r(r,rad_prof,temp_prof)
+    vxyzu(4,i) = uerg(rhofr,temperature,ieos)
     vxyzu(1:3,i) = 0. ! stationary for now
-    pxyzu(4,i) = (kb_on_mh / mu * log(temperature**1.5/(rhof(r)*unit_density))) / kboltz/ unit_ergg
+    pxyzu(4,i) = entropy(rhofr,temperature,ieos)
+    pxyzu(1:3,i) = 0.
+    eos_vars(itemp,i) = temperature
+    presi = pressure(rhofr,temperature,ieos)
+    eos_vars(igamma,i) = 1. + presi/(rhofr*vxyzu(4,i))
  enddo
+ if (ieos == 12) write(*,'(a,1x,f10.4)') ' Mean gamma =', sum(eos_vars(igamma,npart_old+1:npart))/(npart - npart_old)
 
  !--Set timesteps
  tmax = 3.*years/utime
  dtmax = tmax/1000.
+ dtmax_ifactor = 0
+ idtmax_frac = 0 ! so don't write to .restart
+ idtmax_n = 1
 
 end subroutine modify_dump
 
@@ -308,18 +321,59 @@ real function get_temp_r(r,rad_prof,temp_prof)
 
 end function get_temp_r
 
-real function uerg(rho,T)
+real function uerg(rho,T,ieos)
  use physcon, only:kb_on_mh,radconst
  use units,   only:unit_density,unit_ergg
  real, intent(in) :: rho,T
+ integer, intent(in) :: ieos
  real :: ucgs_gas,ucgs_rad,rhocgs
 
  rhocgs = rho*unit_density
  ucgs_gas = 1.5*kb_on_mh*T/mu
- ucgs_rad = 0. !radconst*T**4/rhocgs
+ if (ieos == 12) then
+    ucgs_rad = radconst*T**4/rhocgs
+ else
+    ucgs_rad = 0. !radconst*T**4/rhocgs
+ endif
  uerg = (ucgs_gas+ucgs_rad)/unit_ergg
 
 end function uerg
+
+real function entropy(rho,T,ieos)
+ use physcon, only:kb_on_mh,radconst,kboltz
+ use units,   only:unit_density,unit_ergg
+ real, intent(in) :: rho,T
+ integer, intent(in) :: ieos
+ real :: ent_gas,ent_rad,rhocgs
+
+ rhocgs = rho*unit_density
+ ent_gas = kb_on_mh/mu*log(T**1.5/rhocgs)
+ if (ieos == 12) then
+    ent_rad = 4.*radconst*T**3/(3.*rhocgs)
+ else
+    ent_rad = 0.
+ endif
+ entropy = (ent_gas+ent_rad)/kboltz/ unit_ergg
+
+end function entropy
+
+real function pressure(rho,T,ieos)
+ use physcon, only:kb_on_mh,radconst
+ use units,   only:unit_density,unit_pressure
+ real, intent(in) :: rho,T
+ integer, intent(in) :: ieos
+ real :: p_gas,p_rad,rhocgs
+
+ rhocgs = rho*unit_density
+ p_gas = rhocgs*kb_on_mh*T/mu
+ if (ieos == 12) then
+    p_rad = radconst*T**4/3.
+ else
+    p_rad = 0.
+ endif
+ pressure = (p_gas+p_rad)/ unit_pressure
+
+end function pressure
 
 subroutine calc_rhobreak()
  integer :: i
@@ -339,7 +393,7 @@ subroutine calc_rho0(rhof)
  procedure(rho), pointer, intent(in) :: rhof
  real    :: rho0_min,rho0_max,totmass
  integer :: iter
- 
+
  rho0_min = 0.
  rho0_max = 1.
  totmass = -1.
@@ -358,7 +412,7 @@ subroutine calc_rho0(rhof)
  enddo
  write(*,'(a11,1x,es10.2,1x,a12,1x,i3,1x,a10)') ' Get rho0 =', rhof_rho0*unit_density, 'g/cm^-3 with', iter, 'iterations'
 
-end subroutine
+end subroutine calc_rho0
 
 !----------------------------------------------------------------
 !+

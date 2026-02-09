@@ -77,7 +77,17 @@ endif
 ifeq ($(SETUP), asteroidwind)
 #   asteroid emitting a wind (Trevascus et al. 2021)
     SETUPFILE=setup_asteroidwind.f90
-    SRCINJECT=utils_binary.f90 inject_asteroidwind.f90
+    SRCINJECT=utils_binary.f90 evolve_planet.f90 inject_randomwind.f90
+    IND_TIMESTEPS=yes
+    CONST_AV=yes
+    ISOTHERMAL=yes
+    KNOWN_SETUP=yes
+endif
+
+ifeq ($(SETUP), randomwind)
+#   asteroid emitting a wind (Trevascus et al. 2021)
+    SETUPFILE=setup_disc.f90
+    SRCINJECT=utils_binary.f90 evolve_planet.f90 inject_randomwind.f90
     IND_TIMESTEPS=yes
     CONST_AV=yes
     ISOTHERMAL=yes
@@ -85,11 +95,12 @@ ifeq ($(SETUP), asteroidwind)
 endif
 
 ifeq ($(SETUP), solarsystem)
-#   orbits of minor planets
-    ISOTHERMAL=yes
-    SETUPFILE=utils_ephemeris.f90 utils_mpc.f90 setup_solarsystem.f90
+#   planets and minor bodies in the solar system
+    SETUPFILE=utils_ephemeris.f90 utils_mpc.f90 set_solarsystem.f90 setup_solarsystem.f90
     KNOWN_SETUP=yes
+    GRAVITY=yes
     DUST=yes
+    MODFILE=moddump_sink2gas.f90
 endif
 
 ifeq ($(SETUP), galdisc)
@@ -165,6 +176,17 @@ ifeq ($(SETUP), disc)
     IND_TIMESTEPS=yes
 endif
 
+ifeq ($(SETUP), boilingplanets)
+#   locally isothermal gas disc with planet evolution
+    DISC_VISCOSITY=yes
+    SETUPFILE= setup_disc.f90
+    ANALYSIS= analysis_disc.f90
+    ISOTHERMAL=yes
+    KNOWN_SETUP=yes
+    IND_TIMESTEPS=yes
+    SRCINJECT= utils_binary.f90 evolve_planet.f90 inject_randomwind.f90
+endif
+
 ifeq ($(SETUP), grtde)
 #   tidal disruption event in general relativity
     SETUPFILE= setup_grtde.f90
@@ -190,6 +212,16 @@ ifeq ($(SETUP), radiotde)
     SYSTEM=gfortran
 endif
 
+ifeq ($(SETUP), collgr)
+#   colliding binary star in general relativity
+    SETUPFILE= setup_binary_coll.f90
+    GR=yes
+    METRIC=kerr
+    KNOWN_SETUP=yes
+    GRAVITY=yes
+    IND_TIMESTEPS=yes
+endif
+
 ifeq ($(SETUP), srpolytrope)
 #   polytrope in special relativity
     FPPFLAGS= -DPRIM2CONS_FIRST
@@ -206,7 +238,7 @@ ifeq ($(SETUP), grdisc)
 #   accretion disc around a Kerr black hole
     SETUPFILE= setup_grdisc.f90
     ANALYSIS= analysis_disc.f90
-    GR=yes
+    GR=no
     METRIC=kerr
     KNOWN_SETUP=yes
     MULTIRUNFILE= multirun.f90
@@ -257,7 +289,6 @@ ifeq ($(SETUP), gwdisc)
     DISC_VISCOSITY=yes
     SETUPFILE= setup_gwdisc.f90
     ANALYSIS= analysis_disc.f90
-    MAXP=2000000
     IND_TIMESTEPS=yes
     ISOTHERMAL=yes
     MULTIRUNFILE= multirun.f90
@@ -267,7 +298,6 @@ endif
 
 ifeq ($(SETUP), nshwdisc)
 #   disc around a neutron star
-    FPPFLAGS= -DPRDRAG
     SETUPFILE= setup_nsdisc.f90
     ANALYSIS= analysis_disc.f90
     MODFILE= moddump_changemass.f90
@@ -291,7 +321,6 @@ ifeq ($(SETUP), binarydiscMFlow)
     SETUPFILE= setup_disc.f90
     ANALYSIS= analysis_disc_MFlow.f90
 #    ANALYSIS= analysis_binarydisc.f90
-    MAXP=1000000
     ISOTHERMAL=yes
     CURLV=yes
     LIVE_ANALYSIS=no
@@ -346,6 +375,12 @@ ifeq ($(SETUP), galcen)
     KNOWN_SETUP=yes
 endif
 
+ifeq ($(SETUP), starcluster)
+#   Cluster of stars (ptmass)
+    SETUPFILE= setup_starcluster.f90
+    KNOWN_SETUP=yes
+endif
+
 #--- Bondi accretion/wind ---------------------------
 ifeq ($(SETUP), bondi)
 #   Bondi accretion flow
@@ -384,13 +419,13 @@ endif
 
 ifeq ($(SETUP), tde)
 #   tidal disruption simulations
-    SETUPFILE= setup_star.f90
+    SETUPFILE= setup_grtde.f90
 #    ANALYSIS=analysis_tde.f90
     ANALYSIS=analysis_gws.f90
     GRAVITY=yes
-    ISOTHERMAL=yes
     MODFILE=moddump_tidal.f90
     KNOWN_SETUP=yes
+    IND_TIMESTEPS=yes
 endif
 
 ifeq ($(SETUP), polytrope)
@@ -414,14 +449,14 @@ endif
 ifeq ($(SETUP), sphereinbox)
 #   sphere-in-box setup
     PERIODIC=yes
-    SETUPFILE= velfield_fromcubes.f90 setup_sphereinbox.f90
+    SETUPFILE= setup_sphereinbox.f90
     KNOWN_SETUP=yes
 endif
 
 ifeq ($(SETUP), shock)
 #   shock tube tests
     PERIODIC=yes
-    SETUPFILE= setup_shock.F90
+    SETUPFILE= setup_shock.f90
     KERNEL=quintic
     KNOWN_SETUP=yes
 endif
@@ -429,7 +464,7 @@ endif
 ifeq ($(SETUP), dustyshock)
 #   shock tube tests with dust
     PERIODIC=yes
-    SETUPFILE= setup_shock.F90
+    SETUPFILE= setup_shock.f90
     DUST=yes
     KERNEL=quintic
     KNOWN_SETUP=yes
@@ -438,7 +473,7 @@ endif
 ifeq ($(SETUP), mhdshock)
 #   Ryu & Brio-Wu shock tube tests
     PERIODIC=yes
-    SETUPFILE= setup_shock.F90
+    SETUPFILE= setup_shock.f90
     MHD=yes
     KERNEL=quintic
     KNOWN_SETUP=yes
@@ -447,13 +482,12 @@ endif
 ifeq ($(SETUP), nimhdshock)
 #   non-ideal mhd standing and C shock tests
     PERIODIC=yes
-    SETUPFILE= setup_shock.F90
+    SETUPFILE= setup_shock.f90
     MHD=yes
     STS_TIMESTEPS=no
     NONIDEALMHD=yes
     KERNEL=WendlandC4
     ISOTHERMAL=yes
-    MAXP=6000000
     KNOWN_SETUP=yes
 endif
 
@@ -461,7 +495,7 @@ ifeq ($(SETUP), radshock)
 #   shock tube in radiation hydrodynamics
     PERIODIC=yes
     RADIATION=yes
-    SETUPFILE= setup_shock.F90
+    SETUPFILE= setup_shock.f90
     KERNEL=quintic
     KNOWN_SETUP=yes
 endif
@@ -469,20 +503,18 @@ endif
 ifeq ($(SETUP), srshock)
 #   special relativistic sod shock tube test
     PERIODIC=yes
-    SETUPFILE= setup_shock.F90
+    SETUPFILE= setup_shock.f90
     KERNEL=quintic
     GR=yes
     METRIC=minkowski
     KNOWN_SETUP=yes
-    MAXP=900000
     CONST_AV=yes
 endif
 
 ifeq ($(SETUP), testparticles)
 #   test particles
-    SETUPFILE= setup_testparticles.F90
+    SETUPFILE= setup_testparticles.f90
     KNOWN_SETUP=yes
-    MAXP=500000
     ANALYSIS= analysis_1particle.f90
 endif
 
@@ -492,7 +524,6 @@ ifeq ($(SETUP), gr_testparticles)
     GR=yes
     METRIC=kerr
     KNOWN_SETUP=yes
-    MAXP=1000
     ANALYSIS= analysis_1particle.f90
 endif
 
@@ -592,7 +623,6 @@ ifeq ($(SETUP), sedov)
     SETUPFILE= setup_sedov.f90
     IND_TIMESTEPS=yes
     KNOWN_SETUP=yes
-    MAXP=2100000
 endif
 
 ifeq ($(SETUP), srblast)
@@ -689,7 +719,6 @@ ifeq ($(SETUP), mhdblast)
     PERIODIC=yes
     MHD=yes
     KNOWN_SETUP=yes
-    MAXP=3000000
 endif
 
 ifeq ($(SETUP), mhdwave)
@@ -698,12 +727,11 @@ ifeq ($(SETUP), mhdwave)
     PERIODIC=yes
     MHD=yes
     KNOWN_SETUP=yes
-    MAXP=3000000
 endif
 
 ifeq ($(SETUP), cluster)
 #   star cluster formation
-    SETUPFILE= velfield_fromcubes.f90 setup_cluster.f90
+    SETUPFILE= setup_cluster.f90
     MODFILE= moddump_default.f90
     ANALYSIS= phantom_pdfs.o analysis_MWpdf.f90 #analysis_sinkmass.f90
     ISOTHERMAL=yes
@@ -711,7 +739,6 @@ ifeq ($(SETUP), cluster)
     IND_TIMESTEPS=yes
     KNOWN_SETUP=yes
     MAXPTMASS=1000
-    MAXP=3500000
 endif
 
 ifeq ($(SETUP), binary)
@@ -743,7 +770,6 @@ ifeq ($(SETUP), star)
     MODFILE= utils_binary.f90 set_binary.f90 moddump_binary.f90
     ANALYSIS= ${SRCNIMHD} utils_summary.o utils_omp.o ptmass.o energies.o analysis_common_envelope.f90
     KNOWN_SETUP=yes
-    MAXP=10000000
     GRAVITY=yes
 endif
 
@@ -756,7 +782,6 @@ ifeq ($(SETUP), grstar)
     MODFILE= moddump_tidal.f90
     ANALYSIS= ${SRCNIMHD} utils_summary.o utils_omp.o ptmass.o energies.o analysis_common_envelope.f90
     KNOWN_SETUP=yes
-    MAXP=100000000
     GRAVITY=yes
 endif
 
@@ -766,7 +791,6 @@ ifeq ($(SETUP), radstar)
     MODFILE= utils_binary.f90 set_binary.f90 moddump_binary.f90
     ANALYSIS= ${SRCNIMHD} utils_summary.o utils_omp.o ptmass.o energies.o analysis_common_envelope.f90
     KNOWN_SETUP=yes
-    MAXP=10000000
     GRAVITY=yes
     RADIATION=yes
 endif
@@ -778,7 +802,6 @@ ifeq ($(SETUP), dustystar)
     MODFILE= utils_binary.f90 set_binary.f90 moddump_binary.f90
     ANALYSIS= ${SRCNIMHD} utils_summary.o utils_omp.o ptmass.o energies.o analysis_common_envelope.f90 dust_formation.f90
     KNOWN_SETUP=yes
-    MAXP=10000000
     GRAVITY=yes
     SINK_RADIATION=yes
 endif
@@ -798,6 +821,17 @@ ifeq ($(SETUP), wind)
     SINK_RADIATION=yes
     DUST_NUCLEATION=yes
     INJECT_PARTICLES=yes
+    KNOWN_SETUP=yes
+endif
+
+ifeq ($(SETUP), mhdwind)
+#   wind setup with dust nucleation and MHD
+    SETUPFILE= setup_wind.f90
+    ANALYSIS= analysis_cooling.f90
+    SINK_RADIATION=yes
+    DUST_NUCLEATION=yes
+    INJECT_PARTICLES=yes
+    MHD=yes
     KNOWN_SETUP=yes
 endif
 
@@ -854,9 +888,19 @@ ifeq ($(SETUP), windtunnel)
     ANALYSIS=analysis_common_envelope.f90
 endif
 
+ifeq ($(SETUP), masstransfer)
+#   Wind tunnel setup
+    SETUPFILE= setup_masstransfer.f90
+    SRCINJECT= readwrite_mesa.f90 inject_masstransfer.f90 
+    GRAVITY=no
+    KNOWN_SETUP=yes
+    IND_TIMESTEPS=yes
+    ANALYSIS=analysis_common_envelope.f90
+endif
+
 ifeq ($(SETUP), jet)
 #   Jet simulation from Price, Tricco & Bate (2012)
-    SETUPFILE= velfield_fromcubes.f90 setup_sphereinbox.f90
+    SETUPFILE= setup_sphereinbox.f90
     #ANALYSIS= analysis_jet.f90
     ANALYSIS= ${SRCNIMHD} analysis_protostar_environ.F90
     PERIODIC=yes
@@ -869,7 +913,7 @@ endif
 
 ifeq ($(SETUP), jetnimhd)
 #   Simulation from Wurster, Price & Bate (2016,2017) et seq
-    SETUPFILE= velfield_fromcubes.f90 setup_sphereinbox.f90
+    SETUPFILE= setup_sphereinbox.f90
     ANALYSIS= ${SRCNIMHD} analysis_protostar_environ.F90
     PERIODIC=yes
     GRAVITY=yes
@@ -884,7 +928,7 @@ endif
 
 ifeq ($(SETUP), jetdusty)
 #   dust in star formation
-    SETUPFILE= velfield_fromcubes.f90 setup_sphereinbox.f90
+    SETUPFILE= setup_sphereinbox.f90
     PERIODIC=yes
     GRAVITY=yes
     ISOTHERMAL=yes
@@ -896,7 +940,7 @@ endif
 
 ifeq ($(SETUP), converging)
 #   Simulation from Wurster & Bonnell (2023)
-    SETUPFILE= velfield_fromcubes.f90 setup_collidingclouds.f90
+    SETUPFILE= setup_collidingclouds.f90
     PERIODIC=yes
     GRAVITY=yes
     ISOTHERMAL=no
@@ -910,10 +954,9 @@ ifeq ($(SETUP), sgdisc)
 #   self-gravitating disc
     IND_TIMESTEPS=yes
     GRAVITY=yes
+    MHD=no
     SETUPFILE= setup_disc.f90
-#   ANALYSIS = utils_getneighbours.F90 utils_omp.F90 utils_summary.F90 ptmass.F90 analysis_clumpfind.F90
     ANALYSIS = utils_getneighbours.F90 utils_omp.F90 analysis_disc_stresses.f90
-#    ANALYSIS = utils_getneighbours.F90 utils_omp.F90 analysis_getneighbours.f90
     KNOWN_SETUP=yes
 endif
 
@@ -932,10 +975,11 @@ ifeq ($(SETUP), isosgdisc)
     SETUPFILE= setup_disc.f90
     GRAVITY=yes
     IND_TIMESTEPS=yes
-    ANALYSIS=analysis_dustydisc.f90
+    #ANALYSIS=analysis_dustydisc.f90
     ISOTHERMAL=yes
-    DISC_VISCOSITY=yes
     KNOWN_SETUP=yes
+    SRCINJECT= inject_keplerian.f90
+    ANALYSIS = utils_getneighbours.F90 utils_omp.F90 analysis_disc_stresses.f90
 endif
 
 ifeq ($(SETUP), dustyisosgdisc)
@@ -946,7 +990,7 @@ ifeq ($(SETUP), dustyisosgdisc)
     IND_TIMESTEPS=yes
     ANALYSIS=analysis_dustydisc.f90
     ISOTHERMAL=yes
-    DISC_VISCOSITY=yes
+    SRCINJECT= inject_keplerian.f90
     KNOWN_SETUP=yes
 endif
 
@@ -996,6 +1040,15 @@ ifeq ($(SETUP), testgrav)
     KNOWN_SETUP=yes
 endif
 
+ifeq ($(SETUP), testsinktree)
+#   self-gravity unit tests
+    GRAVITY=yes
+    SINKTREE=yes
+    CONST_ARTRES=yes
+    CURLV=yes
+    KNOWN_SETUP=yes
+endif
+
 ifeq ($(SETUP), testdust)
 #   dust unit tests
     PERIODIC=yes
@@ -1037,8 +1090,15 @@ ifeq ($(SETUP), testgr)
     SETUPFILE= setup_grdisc.f90
 endif
 
+ifeq ($(SETUP), testapr)
+#   unit tests for apr
+    APR=yes
+    KNOWN_SETUP=yes
+    PERIODIC=yes
+endif
+
 ifeq ($(SETUP), flrw)
-#   constant density FLRW cosmology with perturbations  
+#   constant density FLRW cosmology with perturbations
     GR=yes
     KNOWN_SETUP=yes
     IND_TIMESTEPS=no
@@ -1102,7 +1162,7 @@ endif
 ifeq ($(SETUP), sfmcfost) # [buildbot skip]
 #   live feedback from mcfost in star formation calculation
     PERIODIC=yes
-    SETUPFILE= velfield_fromcubes.f90 setup_sphereinbox.f90
+    SETUPFILE= setup_sphereinbox.f90
     ANALYSIS= analysis_mcfost.f90
     LIVE_ANALYSIS=yes
     KNOWN_SETUP=yes
