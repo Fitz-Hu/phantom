@@ -1,6 +1,6 @@
 !--------------------------------------------------------------------------!
 ! The Phantom Smoothed Particle Hydrodynamics code, by Daniel Price et al. !
-! Copyright (c) 2007-2025 The Authors (see AUTHORS)                        !
+! Copyright (c) 2007-2026 The Authors (see AUTHORS)                        !
 ! See LICENCE file for usage and distribution conditions                   !
 ! http://phantomsph.github.io/                                             !
 !--------------------------------------------------------------------------!
@@ -100,9 +100,9 @@ end subroutine get_bigv
 !+
 !----------------------------------------------------------------
 subroutine h2dens(dens,pmass,xyzh,metrici,v)
- use part, only: rhoh
- real, intent(in) :: pmass,xyzh(1:4),metrici(:,:,:),v(1:3)
- real, intent(out):: dens
+ use part, only:rhoh
+ real, intent(in)  :: pmass,xyzh(1:4),metrici(:,:,:),v(1:3)
+ real, intent(out) :: dens
  real :: rho, h, xyz(1:3)
 
  xyz = xyzh(1:3)
@@ -121,8 +121,8 @@ end subroutine h2dens
 subroutine rho2dens(dens,rho,position,metrici,v)
  use metric_tools, only:unpack_metric
  use io,           only:error
- real, intent(in) :: rho,position(1:3),metrici(:,:,:),v(1:3)
- real, intent(out):: dens
+ real, intent(in)  :: rho,position(1:3),metrici(:,:,:),v(1:3)
+ real, intent(out) :: dens
  integer :: ierror
  real :: gcov(0:3,0:3), sqrtg, U0
 
@@ -143,9 +143,9 @@ end subroutine rho2dens
 !----------------------------------------------------------------
 subroutine get_geodesic_accel(axyz,npart,vxyz,metrics,metricderivs)
  use metric_tools, only:unpack_metric
- integer, intent(in) :: npart
- real, intent(in)    :: vxyz(:,:), metrics(:,:,:,:), metricderivs(:,:,:,:)
- real, intent(out)   :: axyz(3,npart)
+ integer, intent(in)  :: npart
+ real,    intent(in)  :: vxyz(:,:), metrics(:,:,:,:), metricderivs(:,:,:,:)
+ real,    intent(out) :: axyz(3,npart)
  real :: gcon(0:3,0:3), v(0:3), gderiv(0:3,0:3,0:3), a(3)
  integer :: i,lambda,mu,sigma
 
@@ -178,8 +178,8 @@ end subroutine get_geodesic_accel
 !+
 !----------------------------------------------------------------
 subroutine get_sqrtg(gcov, sqrtg)
- use metric, only: metric_type
- real, intent(in) :: gcov(0:3,0:3)
+ use metric_tools, only:imetric,imet_binarybh,imet_et
+ real, intent(in)  :: gcov(0:3,0:3)
  real, intent(out) :: sqrtg
  real :: det
  real :: a11,a12,a13,a14
@@ -187,8 +187,7 @@ subroutine get_sqrtg(gcov, sqrtg)
  real :: a31,a32,a33,a34
  real :: a41,a42,a43,a44
 
-
- if (metric_type == 'et') then
+ if (imetric == imet_et .or. imetric == imet_binarybh) then
 
     a11 = gcov(0,0)
     a21 = gcov(1,0)
@@ -222,7 +221,6 @@ subroutine get_sqrtg(gcov, sqrtg)
     sqrtg = 1.
  endif
 
-
 end subroutine get_sqrtg
 
 !----------------------------------------------------------------
@@ -231,7 +229,7 @@ end subroutine get_sqrtg
 !+
 !----------------------------------------------------------------
 subroutine get_sqrt_gamma(gcov,sqrt_gamma)
- use metric, only: metric_type
+ use metric, only:metric_type
  real, intent(in)  :: gcov(0:3,0:3)
  real, intent(out) :: sqrt_gamma
  real :: a11,a12,a13
@@ -270,9 +268,9 @@ end subroutine get_sqrt_gamma
 !+
 !----------------------------------------------------------------
 subroutine perturb_metric(phi,gcovper,gcov)
- real, intent(in) :: phi
+ real, intent(in)  :: phi
  real, intent(out) :: gcovper(0:3,0:3)
- real, optional, intent(in) :: gcov(0:3,0:3)
+ real, intent(in), optional :: gcov(0:3,0:3)
 
  if (present(gcov)) then
     gcovper = gcov
@@ -292,7 +290,6 @@ subroutine perturb_metric(phi,gcovper,gcov)
 
 end subroutine perturb_metric
 
-
 pure subroutine get_b0(gcov,v,b,b0)
  real, intent(in) :: gcov(0:3,0:3),v(1:3),b(1:3)
  real, intent(out) :: b0
@@ -307,17 +304,17 @@ pure subroutine get_b0(gcov,v,b,b0)
  b0 = -dot_product(b,vd(1:3))/vd(0)
 end subroutine get_b0
 
-subroutine get_plasma_beta(gcov,v,b,p,beta)
- real, intent(in) :: gcov(0:3,0:3),v(1:3),b(1:3),P
- real, intent(out) :: beta
- real :: b0,b4(0:3),b2
+!subroutine get_plasma_beta(gcov,v,b,p,beta)
+! real, intent(in) :: gcov(0:3,0:3),v(1:3),b(1:3),P
+! real, intent(out) :: beta
+! real :: b0,b4(0:3),b2
 
- call get_b0(gcov,v,b,b0)
- b4(0) = b0
- b4(1:3) = b
+! call get_b0(gcov,v,b,b0)
+! b4(0) = b0
+! b4(1:3) = b
 
- b2 = dot_product_gr(b4,b4,gcov)
- beta = 2.*p/b2
-end subroutine get_plasma_beta
+! b2 = dot_product_gr(b4,b4,gcov)
+! beta = 2.*p/b2
+!end subroutine get_plasma_beta
 
 end module utils_gr
